@@ -1,8 +1,8 @@
-'''
+"""
 Usage: the input file should be of text-inline format
 python evaluate.py --gold_filepath /data/dai031/Experiments/CADEC/adr/split/test.txt --pred_filepath /data/dai031/Experiments/flair/cadec-adr/test.txt
 python evaluate.py --gold_filepath /data/dai031/Experiments/CADEC/adr/split/test.txt --pred_filepath /data/dai031/Experiments/TransitionDiscontinuous/cadec-50542/test.pred
-'''
+"""
 import argparse, os, sys
 from typing import Dict, List
 from collections import defaultdict
@@ -12,7 +12,8 @@ from xdai.ner.mention import Mention
 
 
 def parse_parameters(parser=None):
-    if parser is None: parser = argparse.ArgumentParser()
+    if parser is None:
+        parser = argparse.ArgumentParser()
 
     ## Required
     parser.add_argument("--gold_filepath", default=None, type=str)
@@ -21,17 +22,25 @@ def parse_parameters(parser=None):
     return args
 
 
-'''Update: 2019-Nov-9'''
+"""Update: 2019-Nov-9"""
+
+
 def compute_f1(TP: int, FP: int, FN: int) -> Dict:
     precision = float(TP) / float(TP + FP) if TP + FP > 0 else 0
     recall = float(TP) / float(TP + FN) if TP + FN > 0 else 0
-    f1 = 2. * ((precision * recall) / (precision + recall)) if precision + recall > 0 else 0
+    f1 = (
+        2.0 * ((precision * recall) / (precision + recall))
+        if precision + recall > 0
+        else 0
+    )
     return precision, recall, f1
 
 
-'''Update: 2019-Nov-9'''
+"""Update: 2019-Nov-9"""
+
+
 def compute_on_corpus(gold_corpus: List[List[str]], pred_corpus: List[List[str]]):
-    assert len(gold_corpus) == len(pred_corpus) # number of sentences
+    assert len(gold_corpus) == len(pred_corpus)  # number of sentences
 
     TP, FP, FN = defaultdict(int), defaultdict(int), defaultdict(int)
     for gold_sentence, pred_sentence in zip(gold_corpus, pred_corpus):
@@ -56,11 +65,21 @@ def compute_on_corpus(gold_corpus: List[List[str]], pred_corpus: List[List[str]]
         metrics["%s-f1" % t] = f1
         f1_per_type.append(f1)
 
-    metrics["macro-precision"] = sum(precision_per_type) / len(precision_per_type) if len(precision_per_type) > 0 else 0.0
-    metrics["macro-recall"] = sum(recall_per_type) / len(recall_per_type) if len(recall_per_type) > 0 else 0.0
-    metrics["macro-f1"] = sum(f1_per_type) / len(f1_per_type) if len(f1_per_type) > 0 else 0.0
+    metrics["macro-precision"] = (
+        sum(precision_per_type) / len(precision_per_type)
+        if len(precision_per_type) > 0
+        else 0.0
+    )
+    metrics["macro-recall"] = (
+        sum(recall_per_type) / len(recall_per_type) if len(recall_per_type) > 0 else 0.0
+    )
+    metrics["macro-f1"] = (
+        sum(f1_per_type) / len(f1_per_type) if len(f1_per_type) > 0 else 0.0
+    )
 
-    precision, recall, f1 = compute_f1(sum(TP.values()), sum(FP.values()), sum(FN.values()))
+    precision, recall, f1 = compute_f1(
+        sum(TP.values()), sum(FP.values()), sum(FN.values())
+    )
     metrics["micro-precision"] = precision
     metrics["micro-recall"] = recall
     metrics["micro-f1"] = f1
@@ -68,7 +87,9 @@ def compute_on_corpus(gold_corpus: List[List[str]], pred_corpus: List[List[str]]
     return metrics
 
 
-'''Update: 2019-Nov-9'''
+"""Update: 2019-Nov-9"""
+
+
 def compute_on_sentences_with_disc(gold_corpus, pred_corpus):
     assert len(gold_corpus) == len(pred_corpus)
 
@@ -83,14 +104,24 @@ def compute_on_sentences_with_disc(gold_corpus, pred_corpus):
     return {"sentences_with_disc-%s" % k: v for k, v in metrics.items()}
 
 
-'''Update: 2019-Nov-9'''
+"""Update: 2019-Nov-9"""
+
+
 def compute_on_disc_mentions(gold_corpus, pred_corpus):
     assert len(gold_corpus) == len(pred_corpus)
 
     TP, FP, FN = 0.0, 0.0, 0.0
     for gold_sentence, pred_sentence in zip(gold_corpus, pred_corpus):
-        gold_mentions = [m for m in Mention.create_mentions("|".join(gold_sentence)) if m.discontinuous]
-        pred_mentions = [m for m in Mention.create_mentions("|".join(pred_sentence)) if m.discontinuous]
+        gold_mentions = [
+            m
+            for m in Mention.create_mentions("|".join(gold_sentence))
+            if m.discontinuous
+        ]
+        pred_mentions = [
+            m
+            for m in Mention.create_mentions("|".join(pred_sentence))
+            if m.discontinuous
+        ]
         for pred in pred_mentions:
             if str(pred) in gold_sentence:
                 TP += 1
@@ -101,7 +132,11 @@ def compute_on_disc_mentions(gold_corpus, pred_corpus):
                 FN += 1
 
     precision, recall, f1 = compute_f1(TP, FP, FN)
-    return {"disc-mention-micro-precision": precision, "disc-mention-micro-recall": recall, "disc-mention-micro-f1": f1}
+    return {
+        "disc-mention-micro-precision": precision,
+        "disc-mention-micro-recall": recall,
+        "disc-mention-micro-f1": f1,
+    }
 
 
 if __name__ == "__main__":

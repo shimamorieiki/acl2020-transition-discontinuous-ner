@@ -8,7 +8,9 @@ from xdai.utils.nn import enable_gradient_clipping, rescale_gradients
 logger = logging.getLogger(__name__)
 
 
-'''Update date: 2019-Nov-6'''
+"""Update date: 2019-Nov-6"""
+
+
 class MetricTracker:
     def __init__(self, should_decrease, patience=None):
         self._best_so_far = None
@@ -20,14 +22,12 @@ class MetricTracker:
         self.best_epoch = None
         self._should_decrease = should_decrease
 
-
     def clear(self) -> None:
         self._best_so_far = None
         self._epochs_with_no_improvement = 0
         self._is_best_so_far = True
         self._epoch_number = 0
         self.best_epoch = None
-
 
     def state_dict(self):
         return {
@@ -41,7 +41,6 @@ class MetricTracker:
             "best_epoch": self.best_epoch,
         }
 
-
     def load_state_dict(self, state_dict) -> None:
         self._best_so_far = state_dict["best_so_far"]
         self._patience = state_dict["patience"]
@@ -51,7 +50,6 @@ class MetricTracker:
         self.best_epoch_metrics = state_dict["best_epoch_metrics"]
         self._epoch_number = state_dict["epoch_number"]
         self.best_epoch = state_dict["best_epoch"]
-
 
     def add_metric(self, metric):
         if self._best_so_far is None:
@@ -74,10 +72,8 @@ class MetricTracker:
             self._epochs_with_no_improvement += 1
         self._epoch_number += 1
 
-
     def is_best_so_far(self) -> bool:
         return self._is_best_so_far
-
 
     def should_stop_early(self) -> bool:
         if self._patience is None:
@@ -86,8 +82,10 @@ class MetricTracker:
             return self._epochs_with_no_improvement >= self._patience
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py (batch_loss)
-Update date: 2019-March-03'''
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py (batch_loss)
+Update date: 2019-March-03"""
+
+
 def _batch_loss(args, model, batch):
     batch = move_to_gpu(batch, cuda_device=args.cuda_device[0])
     output_dict = model(**batch)
@@ -95,8 +93,10 @@ def _batch_loss(args, model, batch):
     return loss
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py (_validation_loss)
-Update date: 2019-April-20'''
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py (_validation_loss)
+Update date: 2019-April-20"""
+
+
 def _get_val_loss(args, model, iterator, data):
     model.eval()
     generator = iterator(data, shuffle=False)
@@ -112,7 +112,9 @@ def _get_val_loss(args, model, iterator, data):
     return loss
 
 
-'''Update date: 2019-April-20'''
+"""Update date: 2019-April-20"""
+
+
 def _is_best_model_so_far(this_epoch_score: float, score_per_epoch: List[float]):
     if not score_per_epoch:
         return True
@@ -120,8 +122,10 @@ def _is_best_model_so_far(this_epoch_score: float, score_per_epoch: List[float])
         return this_epoch_score > max(score_per_epoch)
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py
-Update date: 2019-April-20'''
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py
+Update date: 2019-April-20"""
+
+
 def _output_metrics_to_console(train_metrics, dev_metrics={}):
     metric_names = list(train_metrics.keys()) + list(dev_metrics.keys())
     metric_names = list(set(metric_names))
@@ -131,26 +135,34 @@ def _output_metrics_to_console(train_metrics, dev_metrics={}):
     logger.info(" # Dev set \n     %s" % ("; ".join(dev_metrics)))
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#_save_checkpoint
-Update date: 2019-Nov-9'''
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#_save_checkpoint
+Update date: 2019-Nov-9"""
+
+
 def _save_checkpoint(model_dir, model, epoch, is_best=False):
     model_path = os.path.join(model_dir, "epoch_%s.th" % epoch)
     torch.save(model.state_dict(), model_path)
     if is_best:
-        logger.info(" # Best dev performance so far. Copying weights to %s/best.th" % model_dir)
+        logger.info(
+            " # Best dev performance so far. Copying weights to %s/best.th" % model_dir
+        )
         shutil.copyfile(model_path, os.path.join(model_dir, "best.th"))
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py
-Update date: 2019-April-20'''
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py
+Update date: 2019-April-20"""
+
+
 def _should_early_stop(score_per_epoch: List[float], patience=0):
     if patience > 0 and patience < len(score_per_epoch):
         return max(score_per_epoch[-patience:]) <= max(score_per_epoch[:-patience])
     return False
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#_train_epoch
-Update date: 2019-Nov-9'''
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#_train_epoch
+Update date: 2019-Nov-9"""
+
+
 def _train_epoch(args, model, optimizer, iterator, data, shuffle=True):
     model.train()
     total_loss = 0.0
@@ -168,29 +180,50 @@ def _train_epoch(args, model, optimizer, iterator, data, shuffle=True):
         optimizer.step()
 
         metrics = model.get_metrics(reset=False)
-        metrics["loss"] = float(total_loss / batch_counter) if batch_counter > 0 else 0.0
+        metrics["loss"] = (
+            float(total_loss / batch_counter) if batch_counter > 0 else 0.0
+        )
 
         if batch_counter % args.logging_steps == 0 or batch_counter == num_batches:
-            logger.info("%d out of %d batches, loss: %.3f" % (batch_counter, num_batches, metrics["loss"]))
+            logger.info(
+                "%d out of %d batches, loss: %.3f"
+                % (batch_counter, num_batches, metrics["loss"])
+            )
 
     metrics = model.get_metrics(reset=True)
     metrics["loss"] = float(total_loss / batch_counter) if batch_counter > 0 else 0.0
     return metrics
 
 
-'''Update date: 2019-Nov-9'''
-def _check_max_save_checkpoints(output_dir, max_save_checkpoints, pattern=("epoch_", ".th")):
-    if max_save_checkpoints < 0: return None
-    checkpoints = [f for f in os.listdir(output_dir) if f.startswith(pattern[0]) and f.endswith(pattern[1])]
+"""Update date: 2019-Nov-9"""
+
+
+def _check_max_save_checkpoints(
+    output_dir, max_save_checkpoints, pattern=("epoch_", ".th")
+):
+    if max_save_checkpoints < 0:
+        return None
+    checkpoints = [
+        f
+        for f in os.listdir(output_dir)
+        if f.startswith(pattern[0]) and f.endswith(pattern[1])
+    ]
     if len(checkpoints) > max_save_checkpoints:
-        numbers = sorted([int(re.findall("\d+", filename)[0]) for filename in checkpoints], reverse=True)
+        numbers = sorted(
+            [int(re.findall("\d+", filename)[0]) for filename in checkpoints],
+            reverse=True,
+        )
         for n in numbers[max_save_checkpoints:]:
             os.remove(os.path.join(output_dir, "%s%d%s" % (pattern[0], n, pattern[1])))
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#train
-Update date: 2019-Nov-9'''
-def train_op(args, model, optimizer, train_data, train_iterator, dev_data, dev_iterator):
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#train
+Update date: 2019-Nov-9"""
+
+
+def train_op(
+    args, model, optimizer, train_data, train_iterator, dev_data, dev_iterator
+):
     enable_gradient_clipping(model, args.grad_clipping)
     model_dir = args.output_dir
     max_epoches = args.num_train_epochs
@@ -208,7 +241,9 @@ def train_op(args, model, optimizer, train_data, train_iterator, dev_data, dev_i
             val_metrics = model.get_metrics(reset=True)
             val_metrics["loss"] = val_loss
             this_epoch_val_metric = val_metrics[validation_metric]
-            is_best = _is_best_model_so_far(this_epoch_val_metric, validation_metric_per_epoch)
+            is_best = _is_best_model_so_far(
+                this_epoch_val_metric, validation_metric_per_epoch
+            )
             validation_metric_per_epoch.append(this_epoch_val_metric)
 
         _output_metrics_to_console(train_metrics, val_metrics)
@@ -233,7 +268,9 @@ def train_op(args, model, optimizer, train_data, train_iterator, dev_data, dev_i
     return metrics
 
 
-'''Update date: 2019-Nov-7'''
+"""Update date: 2019-Nov-7"""
+
+
 def eval_op(args, model, data, data_iterator):
     sentences, predictions = [], []
     with torch.no_grad():

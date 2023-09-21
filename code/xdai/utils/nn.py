@@ -2,7 +2,9 @@ import itertools, torch
 from typing import List
 
 
-'''Update date: 2019-Nov-5'''
+"""Update date: 2019-Nov-5"""
+
+
 def block_orthogonal(tensor, split_sizes: List[int], gain=1.0):
     # tensor: the tensor to initialize
     # split_sizes: [10, 20] result in the tensor being split into chunks of size 10 along the first dimension
@@ -12,17 +14,30 @@ def block_orthogonal(tensor, split_sizes: List[int], gain=1.0):
     data = tensor.data
     sizes = list(tensor.size())
     if any([a % b != 0 for a, b in zip(sizes, split_sizes)]):
-        raise ValueError("block_orthogonal: tensor size and split sizes not compatible!")
+        raise ValueError(
+            "block_orthogonal: tensor size and split sizes not compatible!"
+        )
 
-    indexes = [list(range(0, max_size, split)) for max_size, split in zip(sizes, split_sizes)]
+    indexes = [
+        list(range(0, max_size, split)) for max_size, split in zip(sizes, split_sizes)
+    ]
     for block_state_indices in itertools.product(*indexes):
         index_and_step_tuples = zip(block_state_indices, split_sizes)
-        block_slice = tuple([slice(start_index, start_index + step) for start_index, step in index_and_step_tuples])
-        data[block_slice] = torch.nn.init.orthogonal_(tensor[block_slice].contiguous(), gain=gain)
+        block_slice = tuple(
+            [
+                slice(start_index, start_index + step)
+                for start_index, step in index_and_step_tuples
+            ]
+        )
+        data[block_slice] = torch.nn.init.orthogonal_(
+            tensor[block_slice].contiguous(), gain=gain
+        )
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/nn/util.py#clamp_tensor
-Update date: 2019-Nov-6'''
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/nn/util.py#clamp_tensor
+Update date: 2019-Nov-6"""
+
+
 def clamp_tensor(tensor, minimum, maximum):
     if tensor.is_sparse:
         coalesced_tensor = tensor.coalesce()
@@ -33,26 +48,36 @@ def clamp_tensor(tensor, minimum, maximum):
         return tensor.clamp(minimum, maximum)
 
 
-'''Update date: 2019-Nov-7'''
+"""Update date: 2019-Nov-7"""
+
+
 def enable_gradient_clipping(model, grad_clipping) -> None:
     if grad_clipping is not None:
         for parameter in model.parameters():
             if parameter.requires_grad:
-                parameter.register_hook(lambda grad: clamp_tensor(grad, minimum=-grad_clipping, maximum=grad_clipping))
+                parameter.register_hook(
+                    lambda grad: clamp_tensor(
+                        grad, minimum=-grad_clipping, maximum=grad_clipping
+                    )
+                )
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/modules/highway.py
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/modules/highway.py
 https://github.com/LiyuanLucasLiu/LM-LSTM-CRF/blob/master/model/highway.py
 A gated combination of a linear transformation and a non-linear transformation of its input.
 Math: y = g * x + (1 - g) * f(A(x)),
 g is an element-wise gate, computed as: sigmoid(B(x)).
 A is a linear transformation, f is an element-wise non-linearity
-Update date: 2019-Nov-5'''
+Update date: 2019-Nov-5"""
+
+
 class Highway(torch.nn.Module):
     def __init__(self, input_dim, num_layers=1):
         super(Highway, self).__init__()
 
-        self._layers = torch.nn.ModuleList([torch.nn.Linear(input_dim, input_dim * 2) for _ in range(num_layers)])
+        self._layers = torch.nn.ModuleList(
+            [torch.nn.Linear(input_dim, input_dim * 2) for _ in range(num_layers)]
+        )
         for layer in self._layers:
             # Bias the highway layer to just carry its input forward.
             # Set the bias on B(x) to be positive, then g will be biased to be high
@@ -72,8 +97,10 @@ class Highway(torch.nn.Module):
         return current_inputs
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/nn/util.py
-Update date: 2019-April-26'''
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/nn/util.py
+Update date: 2019-April-26"""
+
+
 def masked_softmax(vector, mask=None):
     if mask is None:
         return torch.nn.functional.softmax(vector, dim=-1)
@@ -87,7 +114,9 @@ def masked_softmax(vector, mask=None):
         return torch.nn.functional.softmax(masked_vector, dim=-1)
 
 
-'''Update date: 2019-Nov-7'''
+"""Update date: 2019-Nov-7"""
+
+
 def rescale_gradients(model, grad_norm):
     if grad_norm:
         parameters = [p for p in model.parameters() if p.grad is not None]
@@ -95,26 +124,36 @@ def rescale_gradients(model, grad_norm):
     return None
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/modules/scalar_mix.py
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/modules/scalar_mix.py
 Compute a parameterised scalar mixture of N tensors:
         outs = gamma * sum(s_k * tensor_k)
         s_k = softmax(w)
         gamma and w are parameters
         Imagine tensor_k are outputs of each layer in ELMo, and outs is its final weighted (s_k) representation.
-Update date: 2019-Nov-5'''
+Update date: 2019-Nov-5"""
+
+
 class ScalarMix(torch.nn.Module):
     def __init__(self, num_tensors, trainable=True):
         super(ScalarMix, self).__init__()
         self.num_tensors = num_tensors
         self.scalar_parameters = torch.nn.ParameterList(
-            [torch.nn.Parameter(torch.FloatTensor([0.0]), requires_grad=trainable) for _ in range(num_tensors)])
-        self.gamma = torch.nn.Parameter(torch.FloatTensor([1.0]), requires_grad=trainable)
+            [
+                torch.nn.Parameter(torch.FloatTensor([0.0]), requires_grad=trainable)
+                for _ in range(num_tensors)
+            ]
+        )
+        self.gamma = torch.nn.Parameter(
+            torch.FloatTensor([1.0]), requires_grad=trainable
+        )
 
     def forward(self, tensors, mask=None):
         # tensors must all be the same shape, let's say (batch_size, timesteps, dim)
         assert self.num_tensors == len(tensors)
 
-        normed_weights = torch.nn.functional.softmax(torch.cat([p for p in self.scalar_parameters]), dim=0)
+        normed_weights = torch.nn.functional.softmax(
+            torch.cat([p for p in self.scalar_parameters]), dim=0
+        )
         normed_weights = torch.split(normed_weights, split_size_or_sections=1)
         pieces = []
         for weight, tensor in zip(normed_weights, tensors):
@@ -122,20 +161,22 @@ class ScalarMix(torch.nn.Module):
         return self.gamma * sum(pieces)
 
 
-'''Update date: 2019-Nov-7'''
+"""Update date: 2019-Nov-7"""
+
+
 def sparse_clip_norm(parameters, max_norm: float):
     parameters = list(filter(lambda p: p.grad is not None, parameters))
     total_norm = 0
     for p in parameters:
         if p.grad.is_sparse:
             grad = p.grad.data.coalesce()
-            param_norm = grad._values().norm(2.)
+            param_norm = grad._values().norm(2.0)
         else:
-            param_norm = p.grad.data.norm(2.)
+            param_norm = p.grad.data.norm(2.0)
 
-        total_norm += param_norm ** 2.
+        total_norm += param_norm**2.0
 
-    total_norm = total_norm ** (1. / 2.)
+    total_norm = total_norm ** (1.0 / 2.0)
 
     clip_coef = max_norm / (total_norm + 1e-6)
     if clip_coef < 1:
@@ -147,10 +188,12 @@ def sparse_clip_norm(parameters, max_norm: float):
     return total_norm
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/modules/time_distributed.py
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/modules/time_distributed.py
 Given an input shaped like (batch_size, sequence_length, ...) and a Module that takes input like (batch_size, ...)
 TimeDistributed can reshape the input to be (batch_size * sequence_length, ...) applies the Module, then reshape back.
-Update date: 2019-Nov-5'''
+Update date: 2019-Nov-5"""
+
+
 class TimeDistributed(torch.nn.Module):
     def __init__(self, module):
         super(TimeDistributed, self).__init__()
@@ -167,6 +210,8 @@ class TimeDistributed(torch.nn.Module):
 
         reshaped_outputs = self._module(*reshaped_inputs)
 
-        original_shape = [input_size[0], input_size[1]] + [x for x in reshaped_outputs.size()[1:]]
+        original_shape = [input_size[0], input_size[1]] + [
+            x for x in reshaped_outputs.size()[1:]
+        ]
         outputs = reshaped_outputs.contiguous().view(*original_shape)
         return outputs

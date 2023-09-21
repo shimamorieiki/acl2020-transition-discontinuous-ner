@@ -1,13 +1,20 @@
-'''Update date: 2020-Jan-13'''
+"""Update date: 2020-Jan-13"""
 import argparse, os
 
 
 def parse_parameters(parser=None):
-    if parser is None: parser = argparse.ArgumentParser()
+    if parser is None:
+        parser = argparse.ArgumentParser()
 
     ## Required
-    parser.add_argument("--input_filepath", default="/data/dai031/Experiments/CADEC/text-inline", type=str)
-    parser.add_argument("--output_dir", default="/data/dai031/Experiments/CADEC/split", type=str)
+    parser.add_argument(
+        "--input_filepath",
+        default="/data/dai031/Experiments/CADEC/text-inline",
+        type=str,
+    )
+    parser.add_argument(
+        "--output_dir", default="/data/dai031/Experiments/CADEC/split", type=str
+    )
 
     args, _ = parser.parse_known_args()
     return args
