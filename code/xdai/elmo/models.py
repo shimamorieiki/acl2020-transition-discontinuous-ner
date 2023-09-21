@@ -5,65 +5,133 @@ from xdai.utils.common import sort_batch_by_length
 from xdai.utils.nn import block_orthogonal, Highway, ScalarMix
 from xdai.utils.token_indexer import ELMoCharacterMapper
 from xdai.elmo.utils import add_sentence_boundary_token_ids, remove_sentence_boundaries
-
+from typing import Any
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/modules/elmo.py
 Update date: 2019-Nov-5"""
 
 
 class _ElmoCharacterEncoder(torch.nn.Module):
-    """{"char_cnn":
-    {"activation": "relu", "filters": [[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]],
-    "n_highway": 2, "embedding": {"dim": 16},
-    "n_characters": 262, "max_characters_per_token": 50}}"""
+    """
+    {
+        "char_cnn":{
+            "activation": "relu",
+            "filters": [[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]],
+            "n_highway": 2,
+            "embedding": {"dim": 16},
+            "n_characters": 262,
+            "max_characters_per_token": 50
+        }
+    }
+    """
 
-    def __init__(self, options_file, weight_file, requires_grad=False):
+    def __init__(
+        self, options_file: str, weight_file: str, requires_grad: bool = False
+    ):
+        """_summary_
+            初期化
+        Args:
+            options_file (str): optionのファイル
+            weight_file (str): 重みのファイル
+            requires_grad (bool, optional): gradを要求するか. Defaults to False.
+        """
         super(_ElmoCharacterEncoder, self).__init__()
 
         with open(options_file, "r") as f:
             self._options = json.load(f)
 
+        # 重みのファイル
         self._weight_file = weight_file
-        self.output_dim = self._options["lstm"]["projection_dim"]
-        self._requires_grad = requires_grad
+
+        # 出力層の次元
+        # TODO さすがに多分int
+        self.output_dim: int = self._options["lstm"]["projection_dim"]
+
+        # TODO なにこれ
+        self._requires_grad: bool = requires_grad
+
+        # 重みをロードする
         self._load_weights()
 
-        self._beginning_of_sentence = torch.from_numpy(
+        # TODO ELMoCharacterMapperって何？
+        self._beginning_of_sentence: torch.Tensor = torch.from_numpy(
             np.array(ELMoCharacterMapper.beginning_of_sentence_characters) + 1
         )
-        self._end_of_sentence = torch.from_numpy(
+        self._end_of_sentence: torch.Tensor = torch.from_numpy(
             np.array(ELMoCharacterMapper.end_of_sentence_characters) + 1
         )
 
-    def get_output_dim(self):
+    def get_output_dim(self) -> int:
+        """_summary_
+        出力層の次元を取得する
+        Returns:
+            _type_: _description_
+        """
         return self.output_dim
 
-    def forward(self, inputs):
-        """inputs: batch_size, num_tokens, 50
-        return: batch_size, num_tokens + 2, output_dim"""
-        mask = ((inputs > 0).long().sum(dim=-1) > 0).long()
+    def forward(self, inputs) -> dict[str, Any]:
+        """
+        inputs:
+            batch_size,
+            num_tokens,
+            50
+        return: batch_size, num_tokens + 2, output_dim
+        """
+        # TODO inputの型がまずわからない
+        mask: torch.long = ((inputs > 0).long().sum(dim=-1) > 0).long()
+
+        # 文頭と文末に特殊なtokenを追加する
         inputs_with_boundary, mask_with_boundary = add_sentence_boundary_token_ids(
-            inputs, mask, self._beginning_of_sentence, self._end_of_sentence
-        )
-        max_chars_per_token = self._options["char_cnn"]["max_characters_per_token"]
-        character_embedding = torch.nn.functional.embedding(
-            inputs_with_boundary.view(-1, max_chars_per_token),
-            self._char_embedding_weights,
+            tensor=inputs,
+            mask=mask,
+            sentence_begin_token=self._beginning_of_sentence,
+            sentence_end_token=self._end_of_sentence,
         )
 
+        # 各tokenの最大文字数
+        max_chars_per_token: int = self._options["char_cnn"]["max_characters_per_token"]
+
+        # 文字単位での埋め込み
+        # viewは要素の合計数を変えずに行列のサイズを変更する
+        # 例えば元が3*4の行列であれば、要素数が12であることさえ保持すれば
+        # 1*12だろうと2*6だろうと変更してくれる
+        # 第一引数が-1の場合には、第二引数の列数になるように変更してくれる。
+        # 例えば元が100*100のとき(-1,50)とすれば、(200,50)に変更してくれる
+        character_embedding: torch.Tensor = torch.nn.functional.embedding(
+            input=inputs_with_boundary.view(-1, max_chars_per_token),
+            weight=self._char_embedding_weights,
+        )
+
+        # 活性化関数の確認
         assert self._options["char_cnn"]["activation"] == "relu"
 
         # shape after transpose: (batch_size * (num_tokens + 2), output_dim, max_chars_per_token)
+        # 1番目の次元と2番目の次元(0-indexedなことに注意)を入れ替えると言っていそう
         character_embedding = torch.transpose(character_embedding, 1, 2)
+
+        # TODO これは何をされている？
+        # 提供されたコードは、テキストの文字埋め込みに対して畳み込み演算を適用し、異なる幅（width）の畳み込みフィルターを使用して特徴を抽出するプロセスを示しています。以下は、コードの主要な部分の説明です：
+        # convs = []: 空のリスト convs を作成します。このリストは、畳み込み演算の結果を格納するために使用されます。
+        # for i in range(len(self._convolutions)):: ループを使用して、異なる幅の畳み込み演算を実行します。self._convolutions には異なる幅の畳み込み演算を指定するための情報が含まれていると仮定しています。
+        # conv = getattr(self, "char_conv_%d" % i): 畳み込み演算を取得するために、動的な属性アクセスを使用します。"char_conv_0"、"char_conv_1"、などの属性名が生成され、それぞれ異なる幅の畳み込み演算を指します。
+        # convolved = conv(character_embedding): 文字埋め込み（character_embedding）に畳み込み演算を適用し、convolved に結果を格納します。畳み込みの結果は、サイズが (batch_size * (num_tokens + 2), n_filters) のテンソルです。ここで、batch_size はミニバッチのサイズ、num_tokens はトークンの数、n_filters はフィルターの数を表します。
+        # convolved, _ = torch.max(convolved, dim=-1): 各幅の畳み込み演算の結果に対して、各トークンの次元（最後の次元、dim=-1）で最大値を計算します。これにより、各幅で最も重要な特徴が抽出されます。
+        # convolved = torch.nn.functional.relu(convolved): ReLU（Rectified Linear Unit）活性化関数を適用し、負の値を0にクリップします。これにより、非線形性が導入され、モデルの表現能力が向上します。
+        # convs.append(convolved): 畳み込み演算の結果を convs リストに追加します。これにより、異なる幅の畳み込み演算の結果がリストに格納されます。
+        # このコードは、テキスト処理の一部として文字埋め込みに畳み込み演算を適用し、テキスト内の重要な特徴を抽出するために使用される一般的な手法の一部です。異なる幅の畳み込み演算を使用することで、テキストのローカルな特徴をキャッチする能力が向上し、さまざまなタイプのテキストデータに対応できます。
         convs = []
         for i in range(len(self._convolutions)):
+            # _load_cnn_weights() で畳み込み層のモジュールを追加しており
+            # ここではそこで追加した層に対して、文字埋め込みを畳み込んでいる
             conv = getattr(self, "char_conv_%d" % i)
             convolved = conv(character_embedding)
             # for each width, (batch_size * (num_tokens + 2), n_filters)
-            convolved, _ = torch.max(convolved, dim=-1)
+            # どっちもtorch.Tensor
+            convolved, _ = torch.max(input=convolved, dim=-1)
             convolved = torch.nn.functional.relu(convolved)
             convs.append(convolved)
 
+        # TODO
         token_embedding = torch.cat(convs, dim=-1)
         token_embedding = self._highways(token_embedding)
         token_embedding = self._projection(token_embedding)
@@ -75,40 +143,63 @@ class _ElmoCharacterEncoder(torch.nn.Module):
             ),
         }
 
-    def _load_weights(self):
+    def _load_weights(self) -> None:
+        # hdf5は階層化してデータを持つことができるファイルみたいなやつ
+        # https://qiita.com/simonritchie/items/23db8b4cb5c590924d95
         with h5py.File(self._weight_file, "r") as f:
             self._load_char_embedding(f)
             self._load_cnn_weights(f)
             self._load_highway(f)
             self._load_projection(f)
 
-    def _load_char_embedding(self, f):
+    def _load_char_embedding(self, f: h5py.File) -> None:
+        """_summary_
+            文字列単位の埋め込みをしている
+        Args:
+            f (_type_): _description_
+        """
+        # f["char_embed"][:,:,:]と同じことらしい。(そこまで全部の意味)
+        # TODO それはそうと型は？
         char_embedding_weights = f["char_embed"][...]
-        weights = np.zeros(
-            (char_embedding_weights.shape[0] + 1, char_embedding_weights.shape[1]),
+        weights: np.NDArray[float] = np.zeros(
+            shape=(
+                char_embedding_weights.shape[0] + 1,
+                char_embedding_weights.shape[1],
+            ),
             dtype="float32",
         )
+        # TODO 何で1からなの？
         weights[1:, :] = char_embedding_weights
         self._char_embedding_weights = torch.nn.Parameter(
-            torch.FloatTensor(weights), requires_grad=self._requires_grad
+            data=torch.FloatTensor(weights), requires_grad=self._requires_grad
         )
 
-    def _load_cnn_weights(self, f):
-        filters = self._options["char_cnn"]["filters"]
+    def _load_cnn_weights(self, f: h5py.File) -> None:
+        """_summary_
+            cnnの重みを読み込んでいる
+        Args:
+            f (_type_): _description_
+        """
+        filters: list[list[int]] = self._options["char_cnn"]["filters"]
 
-        convolutions = []
+        convolutions: list[torch.nn.Conv1d] = []
         for i, (width, num) in enumerate(filters):
-            conv = torch.nn.Conv1d(
+            conv: torch.nn.Conv1d = torch.nn.Conv1d(
                 in_channels=self._options["char_cnn"]["embedding"]["dim"],
                 out_channels=num,
                 kernel_size=width,
                 bias=True,
             )
+            # TODO 型が分からない
             weight = f["CNN"]["W_cnn_%d" % i][...]
             bias = f["CNN"]["b_cnn_%d" % i][...]
 
+            # 重みの行列を変形している
+            # TODO squeeezeは何？
+            # 全然意味が分からないんだけどどうやら次元を圧縮しているみたいではある
             weight_reshaped = np.transpose(weight.squeeze(axis=0), axes=(2, 1, 0))
             assert weight_reshaped.shape == tuple(conv.weight.data.shape)
+
             conv.weight.data.copy_(torch.FloatTensor(weight_reshaped))
             conv.weight.requires_grad = self._requires_grad
             conv.bias.data.copy_(torch.FloatTensor(bias))
@@ -119,11 +210,19 @@ class _ElmoCharacterEncoder(torch.nn.Module):
 
         self._convolutions = convolutions
 
-    def _load_highway(self, f):
-        n_filters = sum(n[1] for n in self._options["char_cnn"]["filters"])
-        n_highway = self._options["char_cnn"]["n_highway"]
+    def _load_highway(self, f: h5py.File) -> None:
+        """_summary_
+            highwayを読み込んでいる
+        Args:
+            f (h5py.File): _description_
+        """
+        # filtersの値だけの和を算出している
+        n_filters: int = sum(n[1] for n in self._options["char_cnn"]["filters"])
+        # TODO n_highwayって何？
+        n_highway: int = self._options["char_cnn"]["n_highway"]
 
-        self._highways = Highway(n_filters, n_highway)
+        self._highways: Highway = Highway(n_filters, n_highway)
+
         for i in range(n_highway):
             # transpose and -1.0 are due to the difference between tensorflow and pytorch
             # tf.matmul(X, W) vs. torch.matmul(W, X)
@@ -140,11 +239,21 @@ class _ElmoCharacterEncoder(torch.nn.Module):
             self._highways._layers[i].bias.data.copy_(torch.FloatTensor(bias))
             self._highways._layers[i].bias.requires_grad = self._requires_grad
 
-    def _load_projection(self, f):
+    def _load_projection(self, f: h5py.File) -> None:
+        """_summary_
+            TODO これもよくわからない
+        Args:
+            f (_type_): _description_
+        """
+        # filtersの値だけの和を算出している
         n_filters = sum(n[1] for n in self._options["char_cnn"]["filters"])
+
         self._projection = torch.nn.Linear(n_filters, self.output_dim, bias=True)
+
+        # ファイルから値を読み込んでいる
         weight = f["CNN_proj"]["W_proj"][...]
         bias = f["CNN_proj"]["b_proj"][...]
+
         self._projection.weight.data.copy_(torch.FloatTensor(np.transpose(weight)))
         self._projection.weight.requires_grad = self._requires_grad
         self._projection.bias.data.copy_(torch.FloatTensor(bias))
@@ -156,6 +265,13 @@ Update date: 2019-Nov-5"""
 
 
 class _LstmCellWithProjection(torch.nn.Module):
+    """_summary_
+
+        https://docs.allennlp.org/main/api/modules/lstm_cell_with_projection/
+    Args:
+        torch (_type_): _description_
+    """
+
     def __init__(
         self,
         input_size,

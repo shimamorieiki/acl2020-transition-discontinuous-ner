@@ -72,6 +72,19 @@ Update date: 2019-Nov-5"""
 
 
 class Highway(torch.nn.Module):
+    """_summary_
+    多分ここにあるhighway networkの事な気がする
+    https://cvml-expertguide.net/terms/dl/cnn/cnn-backbone/#221_Highway_network
+    
+    Highway network [Srivastava et al., 2015a] は，
+    層間のスキップ接続を画像CNNに使用することを提案したネットワークである.
+    Highway networkは,2つのゲート機構を用いて,
+    スキップ接続間の送信量の調整量(＝ゲート係数)も加えて学習する
+    (このあとのResNetでは,スキップ接続後は,特徴マップ同士を単に加算するだけである).
+    Args:
+        torch (_type_): _description_
+    """
+
     def __init__(self, input_dim, num_layers=1):
         super(Highway, self).__init__()
 
