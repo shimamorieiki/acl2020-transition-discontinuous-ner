@@ -2,7 +2,7 @@ import torch
 from collections import defaultdict
 from typing import Dict, List
 from xdai.utils.token import Token
-
+from xdai.utils.common import pad_sequence_to_length
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/data/fields/field.py
 Update date: 2019-Nov-5"""
@@ -28,6 +28,41 @@ class _Field:
         if isinstance(self, other.__class__):
             return self.__dict__ == other.__dict__
         return NotImplemented
+
+
+class ActionField:
+    def __init__(self, actions, inputs):
+        self._key = "actions"
+        self.actions = actions
+        self._indexed_actions = None
+        self.inputs = inputs
+
+        if all([isinstance(a, int) for a in actions]):
+            self._indexed_actions = actions
+
+    def count_vocab_items(self, counter):
+        if self._indexed_actions is None:
+            for action in self.actions:
+                counter[self._key][action] += 1
+
+    def index(self, vocab):
+        if self._indexed_actions is None:
+            self._indexed_actions = [
+                vocab.get_item_index(action, self._key) for action in self.actions
+            ]
+
+    def get_padding_lengths(self):
+        return {"num_tokens": self.inputs.sequence_length() * 2}
+
+    def as_tensor(self, padding_lengths):
+        desired_num_actions = padding_lengths["num_tokens"]
+        padded_actions = pad_sequence_to_length(
+            self._indexed_actions, desired_num_actions
+        )
+        return torch.LongTensor(padded_actions)
+
+    def batch_tensors(self, tensor_list):
+        return torch.stack(tensor_list)
 
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/data/fields/metadata_field.py
@@ -96,9 +131,10 @@ class TextField(_Field):
     def __init__(self, tokens: List[Token], token_indexers):
         self.tokens = tokens
         self._token_indexers = token_indexers
-        self._indexed_tokens = None
-        self._indexer_name_to_indexed_token = None
-        self._token_index_to_indexer_name = None
+        # 以下の3つは初期値が None だが、必ずしもその必要はないはずなので辞書型だと仮定する
+        self._indexed_tokens = {}  # None
+        self._indexer_name_to_indexed_token = {}  # None
+        self._token_index_to_indexer_name = {}  # None
 
     def __iter__(self):
         return iter(self.tokens)
@@ -110,6 +146,11 @@ class TextField(_Field):
         return len(self.tokens)
 
     def count_vocab_items(self, counter):
+        """_summary_
+        語彙の数を数える
+        Args:
+            counter (_type_): _description_
+        """
         for indexer in self._token_indexers.values():
             for token in self.tokens:
                 indexer.count_vocab_items(token, counter)
@@ -229,11 +270,15 @@ Update date: 2019-Nov-5"""
 
 
 class Instance:
-    def __init__(self, fields):
-        self.fields = fields
-        self.indexed = False
+    """_summary_
+    これはなんですか？
+    """
 
-    def __getitem__(self, key):
+    def __init__(self, fields: dict[str, TextField | ActionField | MetadataField]):
+        self.fields: dict[str, TextField | ActionField | MetadataField] = fields
+        self.indexed: bool = False
+
+    def __getitem__(self, key: str):
         return self.fields[key]
 
     def __iter__(self):
@@ -242,28 +287,59 @@ class Instance:
     def __len__(self):
         return len(self.fields)
 
-    def add_field(self, field_name, field, vocab):
+    def add_field(self, field_name: str, field, vocab):
+        """_summary_
+        フィールドを追加する
+        keyがstr型なのはそうとして、valueの型が分からない
+        Args:
+            field_name (str): _description_
+            field (_type_): _description_
+            vocab (_type_): _description_
+        """
         self.fields[field_name] = field
         if self.indexed:
             field.index(vocab)
 
     def count_vocab_items(self, counter):
+        """_summary_
+        TODO これはもっと分からない
+        Args:
+            counter (_type_): _description_
+        """
         for field in self.fields.values():
             field.count_vocab_items(counter)
 
     def index_fields(self, vocab):
+        """_summary_
+        TODO これは何？
+        Args:
+            vocab (_type_): _description_
+        """
         if not self.indexed:
             self.indexed = True
             for field in self.fields.values():
                 field.index(vocab)
 
     def get_padding_lengths(self):
+        """_summary_
+        # TODO なにこれ
+        Returns:
+            _type_: _description_
+        """
         lengths = {}
         for field_name, field in self.fields.items():
             lengths[field_name] = field.get_padding_lengths()
         return lengths
 
     def as_tensor_dict(self, padding_lengths):
+        """_summary_
+        # TODO なにこれ
+        Args:
+            padding_lengths (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         padding_lengths = padding_lengths or self.get_padding_lengths()
         tensors = {}
         for field_name, field in self.fields.items():

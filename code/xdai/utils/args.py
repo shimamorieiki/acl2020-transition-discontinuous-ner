@@ -8,6 +8,15 @@ logger = logging.getLogger(__name__)
 
 
 def parse_parameters(parser=None):
+    """_summary_
+    引数をパースする
+    Args:
+        parser (_type_, optional): _description_. Defaults to None.
+
+    Returns:
+        _type_: _description_
+    """
+    # TODO 戻り値の型
     if parser is None:
         parser = argparse.ArgumentParser()
 

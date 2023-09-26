@@ -5,82 +5,163 @@ from xdai.utils.instance import TextField
 from xdai.utils.seq2seq import LstmEncoder
 from xdai.utils.token_embedder import Embedding, TextFieldEmbedder
 from xdai.ner.transition_discontinuous.parsing import Parser
+from xdai.utils.vocab import Vocabulary
 
 
+# 本当はここら辺のクラスも全部個別のファイルに分けたい気持ちがある
 class _Buffer:
-    def __init__(self, sentence, empty_state):
+    """_summary_
+    バッファ
+    """
+
+    def __init__(self, sentence, empty_state: torch.nn.Parameter):
+        """_summary_
+        初期化
+        Args:
+            sentence (_type_): _description_
+            empty_state (_type_): _description_
+        """
+        # 多分sentenceはTensor
         (
             sentence_length,
             _,
         ) = sentence.size()  # sentence length, contextual word embedding size
-        self.sentence_length = sentence_length
+        self.sentence_length: int = sentence_length
         self.sentence = sentence
-        self.pointer = 0
-        self.empty_state = empty_state
+        self.pointer: int = 0
+        # 空の状態を表すParameter
+        self.empty_state: torch.nn.Parameter = empty_state
 
-    def top(self):  # return the first word representation
+    def top(self) -> torch.Tensor:
+        """_summary_
+        bufferの先頭を返す
+        もし、先頭が存在しない場合は「空の状態」を表す表現を返す。
+        Returns:
+            _type_: _description_
+        """
         if self.pointer < self.sentence_length:
             return self.sentence[self.pointer]
         else:
             return self.empty_state
 
-    def pop(self):  # move out the first word, and return its word representation
+    def pop(self) -> torch.Tensor:
+        """_summary_
+        bufferの先頭を捨てる
+        引数の戻り値としてはその捨てた値を返す
+        Returns:
+            _type_: _description_
+        """
         assert self.pointer < self.sentence_length
+
         self.pointer += 1
         return self.sentence[self.pointer - 1]
 
     def __len__(self):
+        """_summary_
+        bufferの長さを返す。
+        具体的にはsentenceの長さから、現在の位置を引いた残りの長さを返す
+        Returns:
+            _type_: _description_
+        """
         return self.sentence_length - self.pointer
 
 
 class _StackLSTM:
-    def __init__(self, lstm_cell, initial_state):
-        self.lstm_cell = lstm_cell
-        self.state = [initial_state]
+    """_summary_
+    stackLSTM
+    """
 
-    def push(self, input):
+    def __init__(
+        self, lstm_cell: torch.nn.LSTMCell, initial_state: list[torch.nn.Parameter]
+    ):
+        self.lstm_cell: torch.nn.LSTMCell = lstm_cell
+        self.state: list[list[torch.nn.Parameter]] = [initial_state]
+
+    def push(self, input: torch.Tensor) -> None:
+        """_summary_
+        stackにinputの要素を追加する
+        Args:
+            input (torch.Tensor): 入力
+        """
         self.state.append(self.lstm_cell(input.unsqueeze(0), self.state[-1]))
 
-    def pop(self):
+    def pop(self) -> torch.Tensor:
+        """_summary_
+        stackの先頭から要素を捨てる
+        捨てた要素を関数の戻り値とする
+        Returns:
+            _type_: _description_
+        """
         assert len(self.state) > 1
         return self.state.pop()[0].squeeze(0)
 
     def top(self):
+        """_summary_
+        stackの先頭要素を取得する
+        Returns:
+            _type_: _description_
+        """
         assert len(self.state) > 0
         return self.state[-1][0].squeeze(0)
 
     def top3(self):
+        """_summary_
+        stackの先頭から3つを取得する
+        3つない場合は同じものを2つ以上取得していそう
+        Returns:
+            _type_: _description_
+        """
         if len(self) >= 3:
             return (
                 self.state[-3][0].squeeze(0),
                 self.state[-2][0].squeeze(0),
                 self.state[-1][0].squeeze(0),
             )
-        elif len(self) >= 2:
+        if len(self) >= 2:
             return (
                 self.state[-2][0].squeeze(0),
                 self.state[-2][0].squeeze(0),
-                self.state[-1][0].squeeze(0),
-            )
-        else:
-            return (
-                self.state[-1][0].squeeze(0),
-                self.state[-1][0].squeeze(0),
                 self.state[-1][0].squeeze(0),
             )
 
+        return (
+            self.state[-1][0].squeeze(0),
+            self.state[-1][0].squeeze(0),
+            self.state[-1][0].squeeze(0),
+        )
+
     def __len__(self):
+        """_summary_
+        stackの長さを取得する
+        Returns:
+            _type_: _description_
+        """
         return len(self.state) - 1
 
 
 class _LeafModule(torch.nn.Module):
-    def __init__(self, input_linear, output_linear):
-        super(_LeafModule, self).__init__()
-        self.input_linear = input_linear
-        self.output_linear = output_linear
+    """_summary_
+    LeafModule?
+    Args:
+        torch (_type_): _description_
+    """
 
-    def forward(self, inputs):
-        cell_state = self.input_linear(inputs)
+    def __init__(self, input_linear: torch.nn.Linear, output_linear: torch.nn.Linear):
+        super(_LeafModule, self).__init__()
+        self.input_linear: torch.nn.Linear = input_linear
+        self.output_linear: torch.nn.Linear = output_linear
+
+    def forward(self, inputs: torch.Tensor):
+        """_summary_
+        順伝播層
+        Args:
+            inputs (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        # TODO RNNの一般的な流れらしいが、あんまりピンと来ていないので調べる
+        cell_state: torch.Tensor = self.input_linear(inputs)
         hidden_state = torch.sigmoid(self.output_linear(inputs)) * torch.tanh(
             cell_state
         )
@@ -88,6 +169,12 @@ class _LeafModule(torch.nn.Module):
 
 
 class _ReduceModule(torch.nn.Module):
+    """_summary_
+    ReduceModule
+    Args:
+        torch (_type_): _description_
+    """
+
     def __init__(self, reduce_linears):
         super(_ReduceModule, self).__init__()
         self.reduce_linears = reduce_linears
@@ -108,27 +195,64 @@ class _ReduceModule(torch.nn.Module):
 
 
 class _Stack(object):
-    def __init__(
-        self, lstm_cell, initial_state, input_linear, output_linear, reduce_linears
-    ):
-        self.stack_lstm = _StackLSTM(lstm_cell, initial_state)
-        self.leaf_module = _LeafModule(input_linear, output_linear)
-        self.reduce_module = _ReduceModule(reduce_linears)
-        self._states = []
+    """_summary_
+    Stack
+    Args:
+        object (_type_): _description_
+    """
 
-    def shift(self, input):
+    def __init__(
+        self,
+        lstm_cell: torch.nn.LSTMCell,
+        initial_state: list[torch.nn.Parameter],
+        input_linear: torch.nn.Linear,
+        output_linear: torch.nn.Linear,
+        reduce_linears: torch.nn.ModuleList,
+    ):
+        # stack lstmのモデル(？側と言うべき？)
+        self.stack_lstm: _StackLSTM = _StackLSTM(lstm_cell, initial_state)
+        # leaf モジュール(結局これはなに？)
+        self.leaf_module: _LeafModule = _LeafModule(input_linear, output_linear)
+        # reduce操作を行うモジュール
+        self.reduce_module: _ReduceModule = _ReduceModule(reduce_linears)
+        # 何かの状態
+        # TODO listの中の型
+        self._states: list[tuple[torch.Tensor, torch.Tensor]] = []
+
+    def shift(self, input: torch.Tensor):
+        """_summary_
+        shift操作
+        Args:
+            input (_type_): _description_
+        """
+        # 分割代入には型アノテーションを付けられないので事前に定義しておく
+        hidden: torch.Tensor
+        cell: torch.Tensor
         hidden, cell = self.leaf_module(input)
         self._states.append((hidden, cell))
         self.stack_lstm.push(hidden)
 
-    def reduce(self, keep=None):
+    def reduce(self, keep: str | None = None) -> None:
+        """_summary_
+        reduce操作
+        Args:
+            keep (_type_, optional): _description_. Defaults to None.
+        """
         assert len(self._states) > 1
+        right_hidden: torch.Tensor
+        right_cell: torch.Tensor
+        left_hidden: torch.Tensor
+        left_cell: torch.Tensor
         right_hidden, right_cell = self._states.pop()
         left_hidden, left_cell = self._states.pop()
+
+        hidden: torch.Tensor
+        cell: torch.Tensor
         hidden, cell = self.reduce_module(
             left_cell, left_hidden, right_cell, right_hidden
         )
 
+        # reduce後に残す場合がある(right_reduce,left_reduce)
         if keep == "RIGHT":
             self._states.append((right_hidden, right_cell))
             self.stack_lstm.state.pop(-2)
@@ -142,22 +266,40 @@ class _Stack(object):
         self._states.append((hidden, cell))
         self.stack_lstm.push(hidden)
 
-    def top(self):
+    def top(self) -> torch.Tensor:
+        """_summary_
+        stackの先頭を取得する
+        Returns:
+            torch.Tensor: _description_
+        """
         return self.stack_lstm.top()
 
-    def top3(self):
+    def top3(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """_summary_
+        stackの先頭から3つを取得する
+        Returns:
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor]: _description_
+        """
         return self.stack_lstm.top3()
 
-    def pop(self):
+    def pop(self) -> None:
+        """_summary_
+        stackの中身を捨てる
+        """
         self._states.pop()
         self.stack_lstm.pop()
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._states)
 
 
-def _xavier_initialization(*size):
-    p = torch.nn.init.xavier_normal_(torch.cuda.FloatTensor(*size)).cuda()
+def _xavier_initialization(*size) -> torch.nn.Parameter:
+    """_summary_
+    ザビエル初期化
+    Returns:
+        _type_: _description_
+    """
+    p = torch.nn.init.xavier_normal_(torch.FloatTensor(*size)).cuda()
     return torch.nn.Parameter(p)
 
 
@@ -165,7 +307,13 @@ def _xavier_initialization(*size):
 
 
 class TransitionModel(torch.nn.Module):
-    def __init__(self, args, vocab):
+    """_summary_
+    TransitionModel
+    Args:
+        torch (_type_): _description_
+    """
+
+    def __init__(self, args, vocab: Vocabulary):
         super(TransitionModel, self).__init__()
         self.idx2action = vocab.get_index_to_item_vocabulary("actions")
         self.action2idx = vocab.get_item_to_index_vocabulary("actions")
@@ -182,7 +330,9 @@ class TransitionModel(torch.nn.Module):
             bidirectional=True,
         )
         self.dropout = torch.nn.Dropout(args.dropout)
-        self.token_empty = torch.nn.Parameter(torch.randn(args.lstm_cell_size * 2))
+        self.token_empty: torch.nn.Parameter = torch.nn.Parameter(
+            torch.randn(args.lstm_cell_size * 2)
+        )
 
         self.stack_lstm = torch.nn.LSTMCell(
             args.lstm_cell_size * 2, args.lstm_cell_size * 2

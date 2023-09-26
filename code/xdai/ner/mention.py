@@ -1,6 +1,5 @@
+from __future__ import annotations
 import logging
-from typing import List
-
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +14,7 @@ class Span(object):
         self.end = int(end)
 
     @classmethod
-    def contains(cls, span1, span2):
+    def contains(cls, span1: Span, span2: Span):
         """whether span1 contains span2, including equals"""
         return span1.start <= span2.start and span1.end >= span2.end
 
@@ -44,7 +43,7 @@ class Span(object):
 """Update date: 2019-Nov-5"""
 
 
-def merge_consecutive_indices(indices: List[int]) -> List[int]:
+def merge_consecutive_indices(indices: list[int]) -> list[int]:
     """convert 136 142 143 147 into 136 147 (these two spans are actually consecutive),
     136 142 143 147 148 160 into 136 160 (these three spans are consecutive)
     it only makes sense when these indices are inclusive"""
@@ -78,15 +77,15 @@ def merge_consecutive_indices(indices: List[int]) -> List[int]:
 
 
 class Mention(object):
-    def __init__(self, spans: List[Span], label: str):
+    def __init__(self, spans: list[Span], label: str):
         assert len(spans) >= 1
-        self.spans = spans
-        self.label = label
+        self.spans: list[Span] = spans
+        self.label: str = label
 
         # assume these spans are not consecutive and sorted by indices, needs to be done before creating the mention
-        self.discontinuous = len(spans) > 1
-        self._overlapping = False
-        self._overlapping_spans = set()
+        self.discontinuous: bool = len(spans) > 1
+        self._overlapping: bool = False
+        self._overlapping_spans: set = set()
 
     @property
     def start(self):
@@ -130,7 +129,16 @@ class Mention(object):
         )
 
     @classmethod
-    def contains(cls, mention1, mention2):
+    def contains(cls, mention1: Mention, mention2: Mention) -> bool:
+        """_summary_
+        mention2がmention1に含まれているか
+        Args:
+            mention1 (Mention): _description_
+            mention2 (Mention): _description_
+
+        Returns:
+            _type_: _description_
+        """
         span2contained = 0
         for span2 in mention2.spans:
             for span1 in mention1.spans:
@@ -140,7 +148,7 @@ class Mention(object):
         return span2contained == len(mention2.spans)
 
     @classmethod
-    def equal_spans(cls, mention1, mention2):
+    def equal_spans(cls, mention1: Mention, mention2: Mention) -> bool:
         if len(mention1.spans) != len(mention2.spans):
             return False
         for span1, span2 in zip(mention1.spans, mention2.spans):
@@ -149,13 +157,13 @@ class Mention(object):
         return True
 
     @classmethod
-    def equals(cls, mention1, mention2):
+    def equals(cls, mention1: Mention, mention2: Mention) -> bool:
         return (
             Mention.equal_spans(mention1, mention2) and mention1.label == mention2.label
         )
 
     @classmethod
-    def overlap_spans(cls, mention1, mention2):
+    def overlap_spans(cls, mention1: Mention, mention2: Mention) -> bool:
         overlap_span = False
         for span1 in mention1.spans:
             for span2 in mention2.spans:
@@ -167,13 +175,27 @@ class Mention(object):
         return overlap_span
 
     @classmethod
-    def remove_discontinuous_mentions(cls, mentions):
+    def remove_discontinuous_mentions(cls, mentions: list[Mention]) -> list[Mention]:
+        """_summary_
+        離散的なメンションを、両端を指定した連続的なメンションに変換する
+        あるメンションが Input: Mention<indices=[17,20,22,22],label="Disorder">,
+        のとき OutPut: Mention<indices=[17,22],label="Disorder">
+        に変換する。
+        スパンの範囲として、もとのスパンの両端を利用する(んだと思う)
+        Args:
+            mentions (list[Mention]): _description_
+
+        Returns:
+            _type_: _description_
+        """
         """convert discontinuous mentions, such as 17,20,22,22 Disorder, to 17,22 Disorder"""
-        continuous_mentions = []
+        continuous_mentions: list[Mention] = []
         for mention in mentions:
             if mention.discontinuous:
                 continuous_mentions.append(
-                    Mention.create_mention([mention.start, mention.end], mention.label)
+                    Mention.create_mention(
+                        indices=[mention.start, mention.end], label=mention.label
+                    )
                 )
             else:
                 continuous_mentions.append(mention)
@@ -241,7 +263,7 @@ class Mention(object):
         return mentions
 
     @classmethod
-    def create_mention(cls, indices: List[int], label: str):
+    def create_mention(cls, indices: list[int], label: str):
         """
         the original indices can be 136,142,143,147, these two spans are actually consecutive, so convert to 136,147
                 similarily, convert 136,142,143,147,148,160 into 136,160 (these three spans are consecutive)
@@ -254,19 +276,35 @@ class Mention(object):
         return cls(spans, label)
 
     @classmethod
-    def create_mentions(cls, mentions: str) -> List[object]:
-        """Input: 5,6 DATE|6,6 DAY|5,6 EVENT"""
+    def create_mentions(cls, mentions: str) -> list[Mention]:
+        """_summary_
+        複数のメンションを表現する文字列をパースし、list[メンション]を作成する
+        具体的には Input: 5,6 DATE|6,6 DAY|5,6 EVENT
+        から Output: list[
+            Mention<indices=[5,6],label="DATE">,
+            Mention<indices=[6,6],label="DAY">,
+            Mention<indices=[5,6],label="EVENT">,
+        ]
+        を作成する
+        Args:
+            mentions (str): _description_
+
+        Returns:
+            list[object]: _description_
+        """
         if len(mentions.strip()) == 0:
             return []
         results = []
         for mention in mentions.split("|"):
-            indices, label = mention.split()
-            indices = [int(i) for i in indices.split(",")]
-            results.append(Mention.create_mention(indices, label))
+            indices_str: str
+            label: str
+            indices_str, label = mention.split()
+            indices: list[int] = [int(i) for i in indices_str.split(",")]
+            results.append(Mention.create_mention(indices=indices, label=label))
         return results
 
     @classmethod
-    def check_overlap_spans(cls, mention1, mention2):
+    def check_overlap_spans(cls, mention1: Mention, mention2: Mention):
         overlap_span = False
         for i, span1 in enumerate(mention1.spans):
             for j, span2 in enumerate(mention2.spans):
@@ -305,7 +343,7 @@ class Mention(object):
         Update: 2019-Nov-1"""
 
 
-def bio_tags_to_mentions(bio_tags: List[str]) -> List[Mention]:
+def bio_tags_to_mentions(bio_tags: list[str]) -> list[Mention]:
     mentions = []
     i = 0
     while i < len(bio_tags):
@@ -351,7 +389,7 @@ def bioes_to_bio(bioes_tags):
 Update: 2019-Oct-13"""
 
 
-def bio_to_bioes(original_tags: List[str]) -> List[str]:
+def bio_to_bioes(original_tags: list[str]) -> list[str]:
     def _change_prefix(original_tag, new_prefix):
         assert original_tag.find("-") > 0 and len(new_prefix) == 1
         chars = list(original_tag)

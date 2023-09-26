@@ -1,6 +1,6 @@
 import json, logging, os, random, shutil, spacy, torch
 import numpy as np
-from typing import Any, Dict
+from typing import Any
 
 
 logger = logging.getLogger(__name__)
@@ -9,7 +9,15 @@ logger = logging.getLogger(__name__)
 """Update date: 2019-Nov-3"""
 
 
-def create_output_dir(args):
+def create_output_dir(args) -> None:
+    """_summary_
+    出力結果を保存するフォルダを作成する
+    Args:
+        args (_type_): _description_
+
+    Raises:
+        ValueError: _description_
+    """
     if (
         os.path.exists(args.output_dir)
         and os.listdir(args.output_dir)
@@ -26,7 +34,7 @@ def create_output_dir(args):
 Update date: 2019-Nov-3"""
 
 
-def dump_metrics(file_path: str, metrics: Dict[str, Any], log: bool = False) -> None:
+def dump_metrics(file_path: str, metrics: dict[str, Any], log: bool = False) -> None:
     metrics_json = json.dumps(metrics, indent=2)
     with open(file_path, "w") as metrics_file:
         metrics_file.write(metrics_json)
@@ -103,7 +111,12 @@ def pad_sequence_to_length(sequence, desired_length, default_value=lambda: 0):
 """Update date: 2019-Nov-4"""
 
 
-def set_cuda(args):
+def set_cuda(args) -> None:
+    """_summary_
+    cudaを準備する
+    Args:
+        args (_type_): _description_
+    """
     cuda_device = [int(i) for i in args.cuda_device.split(",")]
     args.cuda_device = [i for i in cuda_device if i >= 0]
     args.n_gpu = len(args.cuda_device)
@@ -113,7 +126,13 @@ def set_cuda(args):
 """Update date: 2019-Nov-3"""
 
 
-def set_random_seed(args):
+def set_random_seed(args) -> None:
+    """_summary_
+    乱数のシードを設定する。
+    すでに設定されている場合は何もしない
+    Args:
+        args (_type_): _description_
+    """
     if args.seed <= 0:
         logger.info("Does not set the random seed, since the value is %s" % args.seed)
         return

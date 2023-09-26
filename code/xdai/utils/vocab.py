@@ -1,10 +1,10 @@
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/data/vocabulary.py
 Update date: 2019-Nov-5"""
+from __future__ import annotations
 import codecs, logging, os
 from collections import defaultdict
-from typing import Dict
 from tqdm import tqdm
-
+from instance import Instance
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,9 @@ class _IndexToItemDefaultDict(_NamespaceDependentDefaultDict):
 class Vocabulary:
     def __init__(
         self,
-        counter: Dict[str, Dict[str, int]] = None,
-        min_count: Dict[str, int] = None,
-        max_vocab_size: Dict[str, int] = None,
+        counter: dict[str, dict[str, int]] | None = None,
+        min_count: dict[str, int] | None = None,
+        max_vocab_size: dict[str, int] | None = None,
     ):
         self._padding_item = "@@PADDING@@"
         self._oov_item = "@@UNKNOWN@@"
@@ -94,14 +94,47 @@ class Vocabulary:
                     vocab._index_to_item[namespace][i] = item
         return vocab
 
-    @classmethod
-    def from_instances(cls, instances, min_count=None, max_vocab_size=None):
-        counter = defaultdict(lambda: defaultdict(int))
-        for instance in tqdm(instances):
-            instance.count_vocab_items(counter)
-        return cls(counter=counter, min_count=min_count, max_vocab_size=max_vocab_size)
+    @staticmethod
+    def from_instances(
+        instances: list[Instance],
+        min_count: dict[str, int] | None = None,
+        max_vocab_size: dict[str, int] | None = None,
+    ) -> Vocabulary:
+        """_summary_
+        instanceから
+        Args:
+            instances (_type_): _description_
+            min_count (_type_, optional): _description_. Defaults to None.
+            max_vocab_size (_type_, optional): _description_. Defaults to None.
 
-    def _extend(self, counter, min_count=None, max_vocab_size=None):
+        Returns:
+            Vocabulary: _description_
+        """
+        counter: defaultdict[str, defaultdict[str, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
+        for instance in tqdm(instances):
+            # TODO 関数の引数にdictを与えてごにょごにょすることで、
+            # 副作用的にcounterの値が書き変わっている
+            # 正気か？
+            instance.count_vocab_items(counter)
+        return Vocabulary(
+            counter=counter, min_count=min_count, max_vocab_size=max_vocab_size
+        )
+
+    def _extend(
+        self,
+        counter,
+        min_count: dict[str, int] | None = None,
+        max_vocab_size: dict[str, int] | None = None,
+    ):
+        """_summary_
+
+        Args:
+            counter (_type_): _description_
+            min_count (dict[str, int] | None, optional): _description_. Defaults to None.
+            max_vocab_size (dict[str, int] | None, optional): _description_. Defaults to None.
+        """
         counter = counter or {}
         min_count = min_count or {}
         max_vocab_size = max_vocab_size or {}
@@ -116,25 +149,73 @@ class Vocabulary:
                     self._add_item_to_namespace(item, namespace)
 
     def _add_item_to_namespace(self, item, namespace="tokens"):
+        """_summary_
+
+        Args:
+            item (_type_): _description_
+            namespace (str, optional): _description_. Defaults to "tokens".
+        """
         if item not in self._item_to_index[namespace]:
             idx = len(self._item_to_index[namespace])
             self._item_to_index[namespace][item] = idx
             self._index_to_item[namespace][idx] = item
 
     def get_index_to_item_vocabulary(self, namespace="tokens"):
+        """_summary_
+
+        Args:
+            namespace (str, optional): _description_. Defaults to "tokens".
+
+        Returns:
+            _type_: _description_
+        """
         return self._index_to_item[namespace]
 
     def get_item_to_index_vocabulary(self, namespace="tokens"):
+        """_summary_
+
+        Args:
+            namespace (str, optional): _description_. Defaults to "tokens".
+
+        Returns:
+            _type_: _description_
+        """
         return self._item_to_index[namespace]
 
     def get_item_index(self, item, namespace="tokens"):
+        """_summary_
+
+        Args:
+            item (_type_): _description_
+            namespace (str, optional): _description_. Defaults to "tokens".
+
+        Returns:
+            _type_: _description_
+        """
         if item in self._item_to_index[namespace]:
             return self._item_to_index[namespace][item]
         else:
             return self._item_to_index[namespace][self._oov_item]
 
     def get_item_from_index(self, idx: int, namespace="tokens"):
+        """_summary_
+
+        Args:
+            idx (int): _description_
+            namespace (str, optional): _description_. Defaults to "tokens".
+
+        Returns:
+            _type_: _description_
+        """
         return self._index_to_item[namespace][idx]
 
     def get_vocab_size(self, namespace="tokens"):
+        """_summary_
+
+        Args:
+            namespace (str, optional): _description_. Defaults to "tokens".
+
+        Returns:
+            _type_: _description_
+        """
         return len(self._item_to_index[namespace])
