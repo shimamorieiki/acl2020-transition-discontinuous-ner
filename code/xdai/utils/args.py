@@ -1,92 +1,53 @@
-import argparse, logging
-
+import logging
+from tap import Tap
 
 logger = logging.getLogger(__name__)
 
 
-"""Update date: 2019-Nov-5"""
+class SimpleArgumentParser(Tap):
+    train_filepath: str | None = None
+    num_train_instances: int | None = None
+    dev_filepath: str | None = None
+    num_dev_instances: int | None = None
+    test_filepath: str | None = None
+    cache_dir: str | None = None
+    overwrite_cache: bool = False
+    output_dir: str = "./output"
+    overwrite_output_dir: bool = False
+    log_filepath: str | None = None
+    summary_json: str | None = None
+    encoding: str = "utf-8-sig"
+    do_train: bool = False
+    learning_rate: float = 5e-5
+    train_batch_size_per_gpu: int = 8
+    num_train_epochs: int = 3
+    max_steps: int = 0  # If > 0, override num_train_epochs.
+    warmup_steps: int = 0
+    logging_steps: int = 50
+    save_steps: int = 0
+    max_save_checkpoints: int = 2
+    patience: int = 0
+    max_grad_norm: float | None = None
+    grad_clipping: float = 5
+    adam_epsilon: float = 1e-8
+    weight_decay: float | None = None
+    gradient_accumulation_steps: int = 1  # Number of update steps to accumulate before performing a backward/update pass
+    seed: int = 52
+    cuda_device: list[int] = [0]  # a list cuda devices, splitted by
+    do_eval: bool = False
+    eval_batch_size_per_gpu: int = 8
+    eval_metric: str | None = None
+    eval_all_checkpoints: bool = False  # Evaluate all checkpoints.
+    eval_during_training: bool = False  # Evaluate during training at each save step.
+
+    model_type: str | None = None
+    pretrained_model_dir: str | None = None
+    max_seq_length: int = 128
+    labels: str = "0,1"
+    label_filepath: str | None = None
+    tag_schema: str = "B,I"
+    do_lower_case: bool = False
 
 
-def parse_parameters(parser=None):
-    """_summary_
-    引数をパースする
-    Args:
-        parser (_type_, optional): _description_. Defaults to None.
-
-    Returns:
-        _type_: _description_
-    """
-    # TODO 戻り値の型
-    if parser is None:
-        parser = argparse.ArgumentParser()
-
-    ## Data
-    parser.add_argument("--train_filepath", default=None, type=str)
-    parser.add_argument("--num_train_instances", default=None, type=int)
-    parser.add_argument("--dev_filepath", default=None, type=str)
-    parser.add_argument("--num_dev_instances", default=None, type=int)
-    parser.add_argument("--test_filepath", default=None, type=str)
-    parser.add_argument("--cache_dir", default=None, type=str)
-    parser.add_argument("--overwrite_cache", action="store_true")
-    parser.add_argument("--output_dir", default=None, type=str)
-    parser.add_argument("--overwrite_output_dir", action="store_true")
-    parser.add_argument("--log_filepath", default=None, type=str)
-    parser.add_argument("--summary_json", default=None, type=str)
-    parser.add_argument("--encoding", default="utf-8-sig", type=str)
-
-    ## Train
-    parser.add_argument("--do_train", action="store_true")
-    parser.add_argument("--learning_rate", default=5e-5, type=float)
-    parser.add_argument("--train_batch_size_per_gpu", default=8, type=int)
-    parser.add_argument("--num_train_epochs", default=3, type=int)
-    parser.add_argument(
-        "--max_steps", default=0, type=int, help="If > 0, override num_train_epochs."
-    )
-    parser.add_argument("--warmup_steps", default=0, type=int)
-    parser.add_argument("--logging_steps", default=50, type=int)
-    parser.add_argument("--save_steps", default=0, type=int)
-    parser.add_argument("--max_save_checkpoints", default=2, type=int)
-    parser.add_argument("--patience", default=0, type=int)
-    parser.add_argument("--max_grad_norm", default=None, type=float)
-    parser.add_argument("--grad_clipping", default=5, type=float)
-    parser.add_argument("--adam_epsilon", default=1e-8, type=float)
-    parser.add_argument("--weight_decay", default=None, type=float)
-    parser.add_argument(
-        "--gradient_accumulation_steps",
-        default=1,
-        type=int,
-        help="Number of update steps to accumulate before performing a backward/update pass",
-    )
-    parser.add_argument("--seed", default=52, type=int)
-    parser.add_argument(
-        "--cuda_device",
-        default="0",
-        type=str,
-        help="a list cuda devices, splitted by ,",
-    )
-
-    ## Evaluation
-    parser.add_argument("--do_eval", action="store_true")
-    parser.add_argument("--eval_batch_size_per_gpu", default=8, type=int)
-    parser.add_argument("--eval_metric", default=None, type=str)
-    parser.add_argument(
-        "--eval_all_checkpoints", action="store_true", help="Evaluate all checkpoints."
-    )
-    parser.add_argument(
-        "--eval_during_training",
-        action="store_true",
-        help="Evaluate during training at each save step.",
-    )
-
-    ## Model
-    parser.add_argument("--model_type", default=None, type=str)
-    parser.add_argument("--pretrained_model_dir", default=None, type=str)
-    parser.add_argument("--max_seq_length", default=128, type=int)
-    parser.add_argument("--labels", default="0,1", type=str)
-    parser.add_argument("--label_filepath", default=None, type=str)
-    parser.add_argument("--tag_schema", default="B,I")
-    parser.add_argument("--do_lower_case", action="store_true")
-
-    args, _ = parser.parse_known_args()
-
-    return args
+def parse_parameters() -> SimpleArgumentParser:
+    return SimpleArgumentParser().parse_args(known_only=True)

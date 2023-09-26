@@ -15,17 +15,13 @@ from xdai.utils.iterator import BasicIterator, BucketIterator
 from xdai.utils.train import eval_op, train_op
 from xdai.utils.vocab import Vocabulary
 from xdai.ner.transition_discontinuous.dataset_reader import DatasetReader
-
+from xdai.utils.args import SimpleArgumentParser
 
 logger = logging.getLogger(__name__)
 
 
-"""Update at April-22-2019"""
-
-
-if __name__ == "__main__":
-    # TODO argsの型
-    args = parse_parameters()
+def main():
+    args: SimpleArgumentParser = parse_parameters()
     # 出力先のファイルを作成する
     create_output_dir(args)
 
@@ -59,12 +55,19 @@ if __name__ == "__main__":
     set_random_seed(args)
 
     # データセットを読み込む箇所が始まったっぽい
+    # DatasetReader interface を継承するデータセット独自のインフラ層を作りたい
     dataset_reader: DatasetReader = DatasetReader(args)
 
     # 学習データを読み込む
+    # このreadもファイルパスで読み込むファイルを分岐するのではなく、
+    # DatasetReaderの読み込み時に決定したい
+    if args.train_filepath is None:
+        print("train_filepath is not found")
+        return
     train_data: list[Instance] = dataset_reader.read(
         filepath=args.train_filepath, training=True
     )
+
     # 開発データを用意する
     # 開発用のファイルがあればそこから読み込む
     # なければ学習データの1/10を開発データに用いる
@@ -86,6 +89,9 @@ if __name__ == "__main__":
     logger.info("Load %d instances from dev set." % (len(dev_data)))
 
     # テストデータを用意する
+    if args.test_filepath is None:
+        print("test_filepath is not found")
+        return
     test_data = dataset_reader.read(args.test_filepath)
     logger.info("Load %d instances from test set." % (len(test_data)))
 
@@ -112,6 +118,7 @@ if __name__ == "__main__":
     # transitionModelを動かしている(ようやく)
     model: TransitionModel = TransitionModel(args, vocab).cuda(args.cuda_device[0])
     # どういうこと？
+    # TODO 調べる
     parameters = [p for _, p in model.named_parameters() if p.requires_grad]
 
     # ちょっと見たことあるoptimizer
@@ -119,8 +126,15 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(parameters, lr=args.learning_rate)
 
     # これが学習を行っている箇所
+    # この中も後から見るが今は別に関係ない
     metrics = train_op(
-        args, model, optimizer, train_data, train_iterator, dev_data, dev_iterator
+        args=args,
+        model=model,
+        optimizer=optimizer,
+        train_data=train_data,
+        train_iterator=train_iterator,
+        dev_data=dev_data,
+        dev_iterator=dev_iterator,
     )
     logger.info(metrics)
 
@@ -139,3 +153,7 @@ if __name__ == "__main__":
         with open(os.path.join(args.output_dir, "dev.pred"), "w") as f:
             for i in dev_preds:
                 f.write("%s\n%s\n\n" % (i[0], i[1]))
+
+
+if __name__ == "__main__":
+    main()
