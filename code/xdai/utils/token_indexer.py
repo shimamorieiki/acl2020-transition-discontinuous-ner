@@ -1,6 +1,7 @@
-import itertools, re
-from xdai.utils.common import pad_sequence_to_length
+import itertools
+import re
 
+from xdai.utils.common import pad_sequence_to_length
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/data/token_indexers/token_indexer.py#TokenIndexer
 Update date: 2019-Nov-5"""

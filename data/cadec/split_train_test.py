@@ -1,5 +1,6 @@
 """Update date: 2020-Jan-13"""
-import argparse, os
+import argparse
+import os
 
 
 def parse_parameters(parser=None):

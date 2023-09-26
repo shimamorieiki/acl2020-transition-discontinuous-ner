@@ -1,10 +1,14 @@
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/data/vocabulary.py
 Update date: 2019-Nov-5"""
 from __future__ import annotations
-import codecs, logging, os
+
+import codecs
+import logging
+import os
 from collections import defaultdict
-from tqdm import tqdm
+
 from instance import Instance
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 

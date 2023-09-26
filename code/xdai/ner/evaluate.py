@@ -3,9 +3,11 @@ Usage: the input file should be of text-inline format
 python evaluate.py --gold_filepath /data/dai031/Experiments/CADEC/adr/split/test.txt --pred_filepath /data/dai031/Experiments/flair/cadec-adr/test.txt
 python evaluate.py --gold_filepath /data/dai031/Experiments/CADEC/adr/split/test.txt --pred_filepath /data/dai031/Experiments/TransitionDiscontinuous/cadec-50542/test.pred
 """
-import argparse, os, sys
-from typing import Dict, List
+import argparse
+import os
+import sys
 from collections import defaultdict
+from typing import Dict, List
 
 sys.path.insert(0, os.path.abspath("../.."))
 from xdai.ner.mention import Mention

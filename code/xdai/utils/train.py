@@ -1,9 +1,15 @@
-import logging, os, re, shutil, torch
-from tqdm import tqdm
+import logging
+import os
+import re
+import shutil
 from typing import List
+
+import torch
+from tqdm import tqdm
 from xdai.utils.common import move_to_gpu
 from xdai.utils.nn import enable_gradient_clipping, rescale_gradients
-
+from xdai.utils.instance import Instance
+from xdai.utils.iterator import _Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -222,12 +228,18 @@ Update date: 2019-Nov-9"""
 
 
 def train_op(
-    args, model, optimizer, train_data, train_iterator, dev_data, dev_iterator
+    args,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    train_data: list[Instance],
+    train_iterator: _Iterator,
+    dev_data: list[Instance],
+    dev_iterator: _Iterator,
 ):
     enable_gradient_clipping(model, args.grad_clipping)
-    model_dir = args.output_dir
-    max_epoches = args.num_train_epochs
-    patience = args.patience
+    model_dir: str = args.output_dir
+    max_epoches: int = args.num_train_epochs
+    patience: int = args.patience
     validation_metric = args.eval_metric
 
     validation_metric_per_epoch = []

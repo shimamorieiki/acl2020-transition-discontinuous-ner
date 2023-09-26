@@ -1,10 +1,13 @@
-from __future__ import absolute_import, division, print_function, unicode_literals
-import logging, os, sys
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
+import logging
+import os
+import sys
 
 sys.path.insert(0, os.path.abspath("../../.."))
 
 from xdai.ner.transition_discontinuous.parsing import Parser
-
 
 logger = logging.getLogger(__name__)
 

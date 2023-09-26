@@ -1,7 +1,14 @@
-import json, logging, os, random, shutil, spacy, torch
-import numpy as np
+import json
+import logging
+import os
+import random
+import shutil
 from typing import Any
 
+import numpy as np
+import spacy
+import torch
+from xdai.utils.args import SimpleArgumentParser
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +16,7 @@ logger = logging.getLogger(__name__)
 """Update date: 2019-Nov-3"""
 
 
-def create_output_dir(args) -> None:
+def create_output_dir(args: SimpleArgumentParser) -> SimpleArgumentParser:
     """_summary_
     出力結果を保存するフォルダを作成する
     Args:
@@ -28,6 +35,7 @@ def create_output_dir(args) -> None:
         else:
             raise ValueError("Output directory (%s) already exists." % args.output_dir)
     os.makedirs(args.output_dir, exist_ok=True)
+    return args
 
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/common/util.py#dump_metrics
@@ -111,13 +119,13 @@ def pad_sequence_to_length(sequence, desired_length, default_value=lambda: 0):
 """Update date: 2019-Nov-4"""
 
 
-def set_cuda(args) -> None:
+def set_cuda(args: SimpleArgumentParser) -> None:
     """_summary_
     cudaを準備する
     Args:
         args (_type_): _description_
     """
-    cuda_device = [int(i) for i in args.cuda_device.split(",")]
+    cuda_device: list[int] = args.cuda_device
     args.cuda_device = [i for i in cuda_device if i >= 0]
     args.n_gpu = len(args.cuda_device)
     logger.info("Device: %s, n_gpu: %s" % (args.cuda_device, args.n_gpu))
@@ -126,7 +134,7 @@ def set_cuda(args) -> None:
 """Update date: 2019-Nov-3"""
 
 
-def set_random_seed(args) -> None:
+def set_random_seed(args: SimpleArgumentParser) -> None:
     """_summary_
     乱数のシードを設定する。
     すでに設定されている場合は何もしない

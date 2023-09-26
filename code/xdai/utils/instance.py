@@ -1,8 +1,9 @@
-import torch
 from collections import defaultdict
 from typing import Dict, List
-from xdai.utils.token import Token
+
+import torch
 from xdai.utils.common import pad_sequence_to_length
+from xdai.utils.token import Token
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/data/fields/field.py
 Update date: 2019-Nov-5"""

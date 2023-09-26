@@ -1,6 +1,7 @@
-import itertools, torch
+import itertools
 from typing import List
 
+import torch
 
 """Update date: 2019-Nov-5"""
 

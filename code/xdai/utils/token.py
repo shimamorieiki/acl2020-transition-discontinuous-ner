@@ -1,7 +1,8 @@
-import re, spacy
+import re
 from typing import List, NamedTuple
-from xdai.utils.common import load_spacy_model
 
+import spacy
+from xdai.utils.common import load_spacy_model
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/data/tokenizers/token.py
 Update date: 2019-Nov-5"""

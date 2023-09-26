@@ -1,7 +1,8 @@
-import itertools, math, random
+import itertools
+import math
+import random
 from collections import defaultdict
-from typing import cast, Dict, Iterable, List, Tuple
-
+from typing import Dict, Iterable, List, Tuple, cast
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/common/util.py#ensure_list
 Update date: 2019-Nov-18"""

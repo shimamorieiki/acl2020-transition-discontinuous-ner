@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 
-
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/modules/seq2vec_encoders/cnn_encoder.py
 Update date: 2019-Nov-5"""
 

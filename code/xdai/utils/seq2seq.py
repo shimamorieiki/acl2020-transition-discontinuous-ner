@@ -1,7 +1,6 @@
 import torch
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
-
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/nn/util.py
 inputs:
     tensor: batch first tensor

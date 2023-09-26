@@ -1,7 +1,7 @@
 import logging
 from typing import List
-from xdai.ner.mention import merge_consecutive_indices, Mention
 
+from xdai.ner.mention import Mention, merge_consecutive_indices
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,5 @@
 import torch
 
-
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/nn/util.py
 Update date: 2019-Nov-5"""
 

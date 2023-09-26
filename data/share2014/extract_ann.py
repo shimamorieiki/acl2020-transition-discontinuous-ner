@@ -1,4 +1,8 @@
-import argparse, logging, os, re, sys
+import argparse
+import logging
+import os
+import re
+import sys
 
 logger = logging.getLogger(__name__)
 

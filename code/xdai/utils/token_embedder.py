@@ -1,10 +1,12 @@
-import inspect, os, torch
-import numpy as np
+import inspect
+import os
 from typing import Dict
+
+import numpy as np
+import torch
+from xdai.elmo.models import Elmo
 from xdai.utils.nn import TimeDistributed
 from xdai.utils.seq2vec import CnnEncoder
-from xdai.elmo.models import Elmo
-
 
 """Update date: 2019-Nov-5"""
 

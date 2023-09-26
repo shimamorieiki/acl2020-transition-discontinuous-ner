@@ -3,7 +3,9 @@ python convert_text_inline_to_conll.py --input_filepath /data/dai031/Experiments
 python convert_text_inline_to_conll.py --input_filepath /data/dai031/Experiments/CADEC/adr/flat/dev.txt --output_filepath /data/dai031/Experiments/CADEC/adr/flat/dev.conll
 python convert_text_inline_to_conll.py --input_filepath /data/dai031/Experiments/CADEC/adr/flat/test.txt --output_filepath /data/dai031/Experiments/CADEC/adr/flat/test.conll
 """
-import argparse, os, sys
+import argparse
+import os
+import sys
 
 sys.path.insert(0, os.path.abspath("../.."))
 from xdai.ner.mention import mentions_to_bio_tags

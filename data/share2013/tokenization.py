@@ -1,4 +1,7 @@
-import argparse, logging, os, sys
+import argparse
+import logging
+import os
+import sys
 from typing import List, NamedTuple
 
 logger = logging.getLogger(__name__)
