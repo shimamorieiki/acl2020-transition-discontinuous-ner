@@ -21,11 +21,23 @@ class _NamespaceDependentDefaultDict(defaultdict):
         # we do not take non_padded_namespaces as a parameter,
         # because we consider any namespace whose key name ends with labels or tags as non padded namespace,
         # and use padded namespace otherwise
+
+        # lambda関数
         self._padded_function = padded_function
+        # lambda関数
         self._non_padded_function = non_padded_function
+
         super(_NamespaceDependentDefaultDict, self).__init__()
 
-    def __missing__(self, key):
+    def __missing__(self, key: str) -> dict:
+        """_summary_
+        keyに対応するものが見つからなかった場合
+        Args:
+            key (str): _description_
+
+        Returns:
+            _type_: _description_
+        """
         if any(key.endswith(pattern) for pattern in DEFAULT_NON_PADDED_NAMESPACES):
             value = self._non_padded_function()
         else:
@@ -35,16 +47,30 @@ class _NamespaceDependentDefaultDict(defaultdict):
 
 
 class _ItemToIndexDefaultDict(_NamespaceDependentDefaultDict):
-    def __init__(self, padding_item, oov_item):
+    """_summary_
+    dict[str,dict[str,int]]
+    Args:
+        _NamespaceDependentDefaultDict (_type_): _description_
+    """
+
+    def __init__(self, padding_item: str, oov_item: str):
         super(_ItemToIndexDefaultDict, self).__init__(
-            lambda: {padding_item: 0, oov_item: 1}, lambda: {}
+            padded_function=lambda: {padding_item: 0, oov_item: 1},
+            non_padded_function=lambda: {},
         )
 
 
 class _IndexToItemDefaultDict(_NamespaceDependentDefaultDict):
-    def __init__(self, padding_item, oov_item):
+    """_summary_
+    dict[str,dict[int,str]]
+    Args:
+        _NamespaceDependentDefaultDict (_type_): _description_
+    """
+
+    def __init__(self, padding_item: str, oov_item: str):
         super(_IndexToItemDefaultDict, self).__init__(
-            lambda: {0: padding_item, 1: oov_item}, lambda: {}
+            padded_function=lambda: {0: padding_item, 1: oov_item},
+            non_padded_function=lambda: {},
         )
 
 
@@ -81,7 +107,7 @@ class Vocabulary:
     """Update date: 2019-Nov-9"""
 
     @classmethod
-    def from_files(cls, directory):
+    def from_files(cls, directory: str):
         logger.info("Loading item dictionaries from %s.", directory)
         vocab = cls()
         for namespace in os.listdir(directory):
@@ -114,9 +140,7 @@ class Vocabulary:
         Returns:
             Vocabulary: _description_
         """
-        counter: defaultdict[str, defaultdict[str, int]] = defaultdict(
-            lambda: defaultdict(int)
-        )
+        counter: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         for instance in tqdm(instances):
             # TODO 関数の引数にdictを与えてごにょごにょすることで、
             # 副作用的にcounterの値が書き変わっている
@@ -175,9 +199,8 @@ class Vocabulary:
         """
         return self._index_to_item[namespace]
 
-    def get_item_to_index_vocabulary(self, namespace="tokens"):
+    def get_item_to_index_vocabulary(self, namespace: str = "tokens") -> dict[str, int]:
         """_summary_
-
         Args:
             namespace (str, optional): _description_. Defaults to "tokens".
 
@@ -186,9 +209,9 @@ class Vocabulary:
         """
         return self._item_to_index[namespace]
 
-    def get_item_index(self, item, namespace="tokens"):
+    def get_item_index(self, item: str, namespace: str = "tokens") -> int:
         """_summary_
-
+        namespaceのitemのインデックスを取得する
         Args:
             item (_type_): _description_
             namespace (str, optional): _description_. Defaults to "tokens".
@@ -201,9 +224,9 @@ class Vocabulary:
         else:
             return self._item_to_index[namespace][self._oov_item]
 
-    def get_item_from_index(self, idx: int, namespace="tokens"):
+    def get_item_from_index(self, idx: int, namespace: str = "tokens") -> str:
         """_summary_
-
+        namespaceのidxのitemを取得する
         Args:
             idx (int): _description_
             namespace (str, optional): _description_. Defaults to "tokens".
@@ -213,9 +236,9 @@ class Vocabulary:
         """
         return self._index_to_item[namespace][idx]
 
-    def get_vocab_size(self, namespace="tokens"):
+    def get_vocab_size(self, namespace: str = "tokens") -> int:
         """_summary_
-
+        語彙のサイズを取得する
         Args:
             namespace (str, optional): _description_. Defaults to "tokens".
 

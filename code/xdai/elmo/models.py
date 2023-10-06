@@ -1,11 +1,14 @@
-import h5py, json, torch
-import numpy as np
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from xdai.utils.common import sort_batch_by_length
-from xdai.utils.nn import block_orthogonal, Highway, ScalarMix
-from xdai.utils.token_indexer import ELMoCharacterMapper
-from xdai.elmo.utils import add_sentence_boundary_token_ids, remove_sentence_boundaries
+import json
 from typing import Any
+
+import h5py
+import numpy as np
+import torch
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from xdai.elmo.utils import add_sentence_boundary_token_ids, remove_sentence_boundaries
+from xdai.utils.common import sort_batch_by_length
+from xdai.utils.nn import Highway, ScalarMix, block_orthogonal
+from xdai.utils.token_indexer import ELMoCharacterMapper
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/modules/elmo.py
 Update date: 2019-Nov-5"""
@@ -78,7 +81,7 @@ class _ElmoCharacterEncoder(torch.nn.Module):
         return: batch_size, num_tokens + 2, output_dim
         """
         # TODO inputの型がまずわからない
-        mask: torch.long = ((inputs > 0).long().sum(dim=-1) > 0).long()
+        mask = ((inputs > 0).long().sum(dim=-1) > 0).long()
 
         # 文頭と文末に特殊なtokenを追加する
         inputs_with_boundary, mask_with_boundary = add_sentence_boundary_token_ids(
@@ -161,13 +164,14 @@ class _ElmoCharacterEncoder(torch.nn.Module):
         # f["char_embed"][:,:,:]と同じことらしい。(そこまで全部の意味)
         # TODO それはそうと型は？
         char_embedding_weights = f["char_embed"][...]
-        weights: np.NDArray[float] = np.zeros(
+        weights = np.zeros(
             shape=(
                 char_embedding_weights.shape[0] + 1,
                 char_embedding_weights.shape[1],
             ),
             dtype="float32",
         )
+
         # TODO 何で1からなの？
         weights[1:, :] = char_embedding_weights
         self._char_embedding_weights = torch.nn.Parameter(

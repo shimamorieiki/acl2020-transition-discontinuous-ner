@@ -7,22 +7,24 @@ from xdai.utils.instance import ActionField, Instance, MetadataField, TextField
 from xdai.ner.transition_discontinuous.parsing import Parser
 from xdai.utils.token import Token
 import logging
+from xdai.utils.args import SimpleArgumentParser
 
 logger = logging.getLogger(__name__)
 
 
 class DatasetReader:
     """_summary_
-    データセットをロードするクラス
+    データセットを読み込むクラス
     """
 
-    def __init__(self, args):
+    def __init__(self, args: SimpleArgumentParser):
         """_summary_
         初期化する
         Args:
             args (_type_): _description_
         """
-        self.args = args
+        self.args: SimpleArgumentParser = args
+        # parserを用意する
         self.parse: Parser = Parser()
         self._token_indexers: dict[
             str, SingleIdTokenIndexer | TokenCharactersIndexer | ELMoIndexer
@@ -49,7 +51,6 @@ class DatasetReader:
         with open(file=filepath, mode="r", encoding="utf-8") as f:
             # for sentenec in f は危なくない？
             # と思ったけどnextが使われているのでイテレータとして回している可能性がある
-            # sentences = f.readlines()
             for sentence in f:
                 # strip split で取れるのは対象が英語だから
                 tokens: list[Token] = [Token(t) for t in sentence.strip().split()]
@@ -120,8 +121,10 @@ class DatasetReader:
         Returns:
             _type_: _description_
         """
-        text_fields: TextField = TextField(tokens, self._token_indexers)
-        action_fields: ActionField = ActionField(actions, text_fields)
+        text_fields: TextField = TextField(
+            tokens=tokens, token_indexers=self._token_indexers
+        )
+        action_fields: ActionField = ActionField(actions=actions, inputs=text_fields)
         sentence: MetadataField = MetadataField(metadata=sentence_str.strip())
         annotations: MetadataField = MetadataField(metadata=annotations_str.strip())
 

@@ -20,6 +20,22 @@ from xdai.utils.args import SimpleArgumentParser
 logger = logging.getLogger(__name__)
 
 
+def save_vocabulary(datasets: dict[str, list[Instance]], output_dir: str) -> Vocabulary:
+    """_summary_
+    すべてのdataset内のinstanceからvocabを作成している
+    Args:
+        datasets (_type_): _description_
+        output_dir (str): _description_
+    """
+    vocab: Vocabulary = Vocabulary.from_instances(
+        instances=[instance for dataset in datasets.values() for instance in dataset]
+    )
+    # vocabをファイルに保存する
+    vocab.save_to_files(os.path.join(output_dir, "vocabulary"))
+
+    return vocab
+
+
 def main():
     args: SimpleArgumentParser = parse_parameters()
     # 出力先のファイルを作成する
@@ -33,10 +49,11 @@ def main():
         filename=args.log_filepath,
     )
 
-    # configを追加(上書き)する
-    addition_args = json.load(open("config.json"))
-    for k, v in addition_args.items():
-        setattr(args, k, v)
+    # # configを追加(上書き)する
+    # argでデフォルトとして明示した
+    # addition_args = json.load(open("config.json"))
+    # for k, v in addition_args.items():
+    #     setattr(args, k, v)
 
     # argsの中身を出力する
     logger.info(
@@ -56,6 +73,7 @@ def main():
 
     # データセットを読み込む箇所が始まったっぽい
     # DatasetReader interface を継承するデータセット独自のインフラ層を作りたい
+    # 少なくとも日本語を対象としたものに対してはパーサを作成したのでそれを利用する
     dataset_reader: DatasetReader = DatasetReader(args)
 
     # 学習データを読み込む
@@ -96,22 +114,22 @@ def main():
     logger.info("Load %d instances from test set." % (len(test_data)))
 
     datasets = {"train": train_data, "validation": dev_data, "test": test_data}
-    # すべてのdataset内のinstanceからvocabを作成している
-    vocab: Vocabulary = Vocabulary.from_instances(
-        instances=[instance for dataset in datasets.values() for instance in dataset]
-    )
-    # vocabをファイルに保存する
-    vocab.save_to_files(os.path.join(args.output_dir, "vocabulary"))
+    # ここまでは理解した
 
-    # TODO これは何？
-    # trainに対してなんやかんややっている場所
+    # すべてのdataset内のinstanceからvocabを作成している
+    # TODO 具体的な詳細についてはあとからちゃんと見る
+    vocab: Vocabulary = save_vocabulary(datasets=datasets, output_dir=args.output_dir)
+
+    # train_iteratorにvocabの値を追加している
+    # だからなんなのか
     train_iterator = BucketIterator(
         sorting_keys=[("tokens", "tokens_length")],
         batch_size=args.train_batch_size_per_gpu,
     )
     train_iterator.index_with(vocab)
 
-    # devに対してなんやかんややっている場所
+    # dev_iteratorにvocabの値を追加している
+    # だからなんなのか
     dev_iterator = BasicIterator(batch_size=args.eval_batch_size_per_gpu)
     dev_iterator.index_with(vocab)
 

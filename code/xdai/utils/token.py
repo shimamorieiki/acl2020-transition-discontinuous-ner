@@ -1,7 +1,8 @@
 import re
-from typing import List, NamedTuple
+from typing import NamedTuple
 
 import spacy
+
 from xdai.utils.common import load_spacy_model
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/data/tokenizers/token.py
@@ -9,8 +10,8 @@ Update date: 2019-Nov-5"""
 
 
 class Token(NamedTuple):
-    text: str = None
-    start: int = None  # the character offset of this token into the tokenized sentence.
+    text: str = ""
+    start: int = 0  # the character offset of this token into the tokenized sentence.
 
     @property
     def end(self):
@@ -63,7 +64,7 @@ class WhitespaceTokenizer:
 Update date: 2019-Nov-25"""
 
 
-def _remove_spaces(tokens: List[spacy.tokens.Token]):
+def _remove_spaces(tokens: list[spacy.tokens.Token]):
     return [t for t in tokens if not t.is_space]
 
 
@@ -78,7 +79,7 @@ class SpacyTokenizer:
     def _sanitize(self, tokens):
         return [Token(t.text, t.idx) for t in tokens]
 
-    def batch_tokenize(self, texts: List[str]):
+    def batch_tokenize(self, texts: list[str]):
         return [
             self._sanitize(_remove_spaces(tokens))
             for tokens in self.spacy.pipe(texts, n_threads=-1)
@@ -101,10 +102,10 @@ class SpacySentenceSplitter:
                 sbd = self.spacy.create_pipe(sbd_name)
                 self.spacy.add_pipe(sbd)
 
-    def split_sentences(self, text: str) -> List[str]:
+    def split_sentences(self, text: str) -> list[str]:
         return [sent.string.strip() for sent in self.spacy(text).sents]
 
-    def batch_split_sentences(self, texts: List[str]) -> List[List[str]]:
+    def batch_split_sentences(self, texts: list[str]) -> list[list[str]]:
         return [
             [sent.string.strip() for sent in doc.sents]
             for doc in self.spacy.pipe(texts)

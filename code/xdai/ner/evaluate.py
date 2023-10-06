@@ -7,7 +7,6 @@ import argparse
 import os
 import sys
 from collections import defaultdict
-from typing import Dict, List
 
 sys.path.insert(0, os.path.abspath("../.."))
 from xdai.ner.mention import Mention
@@ -27,13 +26,13 @@ def parse_parameters(parser=None):
 """Update: 2019-Nov-9"""
 
 
-def compute_f1(TP: int, FP: int, FN: int) -> Dict:
-    precision = float(TP) / float(TP + FP) if TP + FP > 0 else 0
-    recall = float(TP) / float(TP + FN) if TP + FN > 0 else 0
+def compute_f1(TP: int, FP: int, FN: int) -> tuple[float, float, float]:
+    precision = float(TP) / float(TP + FP) if TP + FP > 0 else 0.0
+    recall = float(TP) / float(TP + FN) if TP + FN > 0 else 0.0
     f1 = (
         2.0 * ((precision * recall) / (precision + recall))
         if precision + recall > 0
-        else 0
+        else 0.0
     )
     return precision, recall, f1
 
@@ -41,7 +40,7 @@ def compute_f1(TP: int, FP: int, FN: int) -> Dict:
 """Update: 2019-Nov-9"""
 
 
-def compute_on_corpus(gold_corpus: List[List[str]], pred_corpus: List[List[str]]):
+def compute_on_corpus(gold_corpus: list[list[str]], pred_corpus: list[list[str]]):
     assert len(gold_corpus) == len(pred_corpus)  # number of sentences
 
     TP, FP, FN = defaultdict(int), defaultdict(int), defaultdict(int)
@@ -112,7 +111,7 @@ def compute_on_sentences_with_disc(gold_corpus, pred_corpus):
 def compute_on_disc_mentions(gold_corpus, pred_corpus):
     assert len(gold_corpus) == len(pred_corpus)
 
-    TP, FP, FN = 0.0, 0.0, 0.0
+    TP, FP, FN = 0, 0, 0
     for gold_sentence, pred_sentence in zip(gold_corpus, pred_corpus):
         gold_mentions = [
             m

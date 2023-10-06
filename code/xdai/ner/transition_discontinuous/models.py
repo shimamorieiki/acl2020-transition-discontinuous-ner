@@ -1,11 +1,12 @@
 import torch
 import torch.nn.functional as F
+from xdai.ner.transition_discontinuous.parsing import Parser
 from xdai.utils.attention import BilinearAttention
 from xdai.utils.instance import TextField
 from xdai.utils.seq2seq import LstmEncoder
 from xdai.utils.token_embedder import Embedding, TextFieldEmbedder
-from xdai.ner.transition_discontinuous.parsing import Parser
 from xdai.utils.vocab import Vocabulary
+from xdai.utils.args import SimpleArgumentParser
 
 
 # 本当はここら辺のクラスも全部個別のファイルに分けたい気持ちがある
@@ -313,7 +314,7 @@ class TransitionModel(torch.nn.Module):
         torch (_type_): _description_
     """
 
-    def __init__(self, args, vocab: Vocabulary):
+    def __init__(self, args: SimpleArgumentParser, vocab: Vocabulary):
         super(TransitionModel, self).__init__()
         self.idx2action = vocab.get_index_to_item_vocabulary("actions")
         self.action2idx = vocab.get_item_to_index_vocabulary("actions")

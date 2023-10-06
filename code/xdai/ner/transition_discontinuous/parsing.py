@@ -1,5 +1,4 @@
 import logging
-from typing import List
 
 from xdai.ner.mention import Mention, merge_consecutive_indices
 
@@ -47,7 +46,7 @@ class Parser(object):
     """
 
     # 引数 actions の要素は SHIFT, OUT, COMPLETE-Y, REDUCE, LEFT-REDUCE, RIGHT-REDUCE のいずれか
-    def parse(self, actions: list[str], seq_length: int | None = None) -> List[Mention]:
+    def parse(self, actions: list[str], seq_length: int | None = None) -> list[Mention]:
         """_summary_
         パースする。何を？
         Args:

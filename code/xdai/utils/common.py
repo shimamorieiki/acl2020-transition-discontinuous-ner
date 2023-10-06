@@ -109,7 +109,9 @@ def move_to_gpu(obj, cuda_device=0):
 """Update date: 2019-Nov-3"""
 
 
-def pad_sequence_to_length(sequence, desired_length, default_value=lambda: 0):
+def pad_sequence_to_length(
+    sequence: list, desired_length: int, default_value=lambda: 0
+) -> list:
     padded_sequence = sequence[:desired_length]
     for _ in range(desired_length - len(padded_sequence)):
         padded_sequence.append(default_value())
