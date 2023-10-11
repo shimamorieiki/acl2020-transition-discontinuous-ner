@@ -1,10 +1,9 @@
+from __future__ import annotations
 from collections import defaultdict
-from typing import Any
 
 import torch
 from xdai.utils.common import pad_sequence_to_length
 from xdai.utils.token import Token
-from xdai.utils.instance import ActionField, MetadataField, TextField
 from xdai.utils.token_indexer import (
     ELMoIndexer,
     SingleIdTokenIndexer,
@@ -18,10 +17,10 @@ Update date: 2019-Nov-5"""
 
 class _Field:
     def count_vocab_items(self, counter: dict[str, dict[str, int]]):
-        raise NotImplementedError
+        pass
 
-    def index(self, vocab):
-        raise NotImplementedError
+    def index(self, vocab: Vocabulary):
+        pass
 
     def get_padding_lengths(self):
         raise NotImplementedError
@@ -107,6 +106,9 @@ class MetadataField(_Field):
             return len(self.metadata)
         except TypeError:
             raise TypeError("Metadata has no length.")
+
+    def count_vocab_items(self, counter: dict[str, dict[str, int]]):
+        pass
 
     def get_padding_lengths(self) -> dict[str, int]:
         return {}

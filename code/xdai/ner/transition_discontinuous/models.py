@@ -571,6 +571,8 @@ class TransitionModel(torch.nn.Module):
                     valid_actions = self._get_possible_actions(
                         stack, buffer, previous_action_name
                     )
+                    # TODO 多分actionsのラベルが一致していないので
+                    # ここでエラーが出るのはそりゃそうって感じだと思う
                     assert gold_action in valid_actions
                     gold_actions.append(gold_action)
                     gold_action_name = self.idx2action[gold_action]

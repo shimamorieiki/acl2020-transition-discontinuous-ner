@@ -2,7 +2,6 @@ import logging
 import os
 import re
 import shutil
-from typing import List
 
 import torch
 from tqdm import tqdm
@@ -10,6 +9,8 @@ from xdai.utils.common import move_to_gpu
 from xdai.utils.nn import enable_gradient_clipping, rescale_gradients
 from xdai.utils.instance import Instance
 from xdai.utils.iterator import _Iterator
+from xdai.utils.args import SimpleArgumentParser
+from xdai.ner.transition_discontinuous.models import TransitionModel
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class MetricTracker:
         self.best_epoch = state_dict["best_epoch"]
 
     def add_metric(self, metric):
+        new_best: bool = False
         if self._best_so_far is None:
             new_best = True
         else:
@@ -121,7 +123,7 @@ def _get_val_loss(args, model, iterator, data):
 """Update date: 2019-April-20"""
 
 
-def _is_best_model_so_far(this_epoch_score: float, score_per_epoch: List[float]):
+def _is_best_model_so_far(this_epoch_score: float, score_per_epoch: list[float]):
     if not score_per_epoch:
         return True
     else:
@@ -159,7 +161,7 @@ def _save_checkpoint(model_dir, model, epoch, is_best=False):
 Update date: 2019-April-20"""
 
 
-def _should_early_stop(score_per_epoch: List[float], patience=0):
+def _should_early_stop(score_per_epoch: list[float], patience=0):
     if patience > 0 and patience < len(score_per_epoch):
         return max(score_per_epoch[-patience:]) <= max(score_per_epoch[:-patience])
     return False
@@ -169,7 +171,14 @@ def _should_early_stop(score_per_epoch: List[float], patience=0):
 Update date: 2019-Nov-9"""
 
 
-def _train_epoch(args, model, optimizer, iterator, data, shuffle=True):
+def _train_epoch(
+    args: SimpleArgumentParser,
+    model: TransitionModel,
+    optimizer,
+    iterator,
+    data,
+    shuffle=True,
+):
     model.train()
     total_loss = 0.0
     generator = iterator(data, shuffle=shuffle)
@@ -228,8 +237,8 @@ Update date: 2019-Nov-9"""
 
 
 def train_op(
-    args,
-    model: torch.nn.Module,
+    args: SimpleArgumentParser,
+    model: TransitionModel,
     optimizer: torch.optim.Optimizer,
     train_data: list[Instance],
     train_iterator: _Iterator,
@@ -240,7 +249,8 @@ def train_op(
     model_dir: str = args.output_dir
     max_epoches: int = args.num_train_epochs
     patience: int = args.patience
-    validation_metric = args.eval_metric
+    # TODO 本当はargsの引数で変更すべきだとは思うが、取りあえずは決め打ち
+    validation_metric = "f1-overall"  # args.eval_metric
 
     validation_metric_per_epoch = []
     metrics = {}

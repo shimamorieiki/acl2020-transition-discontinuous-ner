@@ -15,6 +15,7 @@ from xdai.utils.iterator import BasicIterator, BucketIterator
 from xdai.utils.train import eval_op, train_op
 from xdai.utils.vocab import Vocabulary
 from xdai.ner.transition_discontinuous.dataset_reader import DatasetReader
+from xdai.ner.transition_discontinuous.dataset_reader_ys import DatasetReaderYS
 from xdai.utils.args import SimpleArgumentParser
 
 logger = logging.getLogger(__name__)
@@ -32,8 +33,88 @@ def save_vocabulary(datasets: dict[str, list[Instance]], output_dir: str) -> Voc
     )
     # vocabをファイルに保存する
     vocab.save_to_files(os.path.join(output_dir, "vocabulary"))
-
+    print("vocab saved")
     return vocab
+
+
+def get_datasets(
+    model_type: str,
+    train_filepath: str | None,
+    dev_filepath: str | None,
+    test_filepath: str | None,
+    num_train_instances: int | None,
+    num_dev_instances: int | None,
+) -> dict[str, list[Instance]]:
+    """_summary_
+    データセットを読み込む箇所
+    """
+    # データセットを読み込む箇所が始まったっぽい
+    # DatasetReader interface を継承するデータセット独自のインフラ層を作りたい
+    # 少なくとも日本語を対象としたものに対してはパーサを作成したのでそれを利用する
+    dataset_reader: DatasetReader = DatasetReader(model_type=model_type)
+
+    # 学習データを読み込む
+    # このreadもファイルパスで読み込むファイルを分岐するのではなく、
+    # DatasetReaderの読み込み時に決定したい
+    if train_filepath is None:
+        raise ValueError("train_filepath is not found")
+    train_data: list[Instance] = dataset_reader.read(
+        filepath=train_filepath, training=True
+    )
+
+    # 開発データを用意する
+    # 開発用のファイルがあればそこから読み込む
+    # なければ学習データの1/10を開発データに用いる
+    if dev_filepath is None:
+        num_dev_instances = int(len(train_data) / 10)
+        dev_data = train_data[0:num_dev_instances]
+        train_data = train_data[num_dev_instances:]
+    else:
+        dev_data = dataset_reader.read(dev_filepath)
+
+    # 一通り割り振った後に、引数が存在していたら後から絞り込む
+    # args.num_train_instances, args.num_dev_instances はともに int 型
+    if num_train_instances is not None:
+        train_data = train_data[0:num_train_instances]
+    if num_dev_instances is not None:
+        dev_data = dev_data[0:num_dev_instances]
+
+    logger.info("Load %d instances from train set." % (len(train_data)))
+    logger.info("Load %d instances from dev set." % (len(dev_data)))
+
+    # テストデータを用意する
+    if test_filepath is None:
+        raise ValueError("test_filepath is not found")
+    test_data = dataset_reader.read(test_filepath)
+    logger.info("Load %d instances from test set." % (len(test_data)))
+
+    return {"train": train_data, "validation": dev_data, "test": test_data}
+
+
+def get_datasets_ys() -> dict[str, list[Instance]]:
+    """_summary_
+    ysデータセットを読み込む箇所
+    Returns:
+        dict[str, list[Instance]]: _description_
+    """
+
+    # 現時点ではすべてのデータが1つのファイルに存在している
+    data_filepath = "../../../../data/ys/actions.jsonl"
+    data_reader_ys = DatasetReaderYS("")
+    instances = data_reader_ys.read(filepath=data_filepath)
+
+    # データ全体をtrain:dev:test = 6:1:3で分ける
+    num_dev_instances = int(len(instances) / 10)
+    num_test_instances = int(3 * len(instances) / 10)
+    dev_data = instances[0:num_dev_instances]
+    test_data = instances[num_dev_instances : num_dev_instances + num_test_instances]
+    train_data = instances[num_dev_instances + num_test_instances :]
+
+    logger.info("Load %d instances from train set." % (len(train_data)))
+    logger.info("Load %d instances from dev set." % (len(dev_data)))
+    logger.info("Load %d instances from test set." % (len(test_data)))
+
+    return {"train": train_data, "validation": dev_data, "test": test_data}
 
 
 def main():
@@ -55,15 +136,16 @@ def main():
     # for k, v in addition_args.items():
     #     setattr(args, k, v)
 
+    # TODO 取りあえず一旦無視する
     # argsの中身を出力する
-    logger.info(
-        "Parameters: %s"
-        % json.dumps(
-            {k: v for k, v in vars(args).items() if v is not None},
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    # logger.info(
+    #     "Parameters: %s"
+    #     % json.dumps(
+    #         {k: v for k, v in vars(args).items() if v is not None},
+    #         indent=2,
+    #         sort_keys=True,
+    #     )
+    # )
 
     # cudaの準備
     set_cuda(args)
@@ -71,51 +153,7 @@ def main():
     # 乱数のシードを設定する
     set_random_seed(args)
 
-    # データセットを読み込む箇所が始まったっぽい
-    # DatasetReader interface を継承するデータセット独自のインフラ層を作りたい
-    # 少なくとも日本語を対象としたものに対してはパーサを作成したのでそれを利用する
-    dataset_reader: DatasetReader = DatasetReader(args)
-
-    # 学習データを読み込む
-    # このreadもファイルパスで読み込むファイルを分岐するのではなく、
-    # DatasetReaderの読み込み時に決定したい
-    if args.train_filepath is None:
-        print("train_filepath is not found")
-        return
-    train_data: list[Instance] = dataset_reader.read(
-        filepath=args.train_filepath, training=True
-    )
-
-    # 開発データを用意する
-    # 開発用のファイルがあればそこから読み込む
-    # なければ学習データの1/10を開発データに用いる
-    if args.dev_filepath is None:
-        num_dev_instances = int(len(train_data) / 10)
-        dev_data = train_data[0:num_dev_instances]
-        train_data = train_data[num_dev_instances:]
-    else:
-        dev_data = dataset_reader.read(args.dev_filepath)
-
-    # 一通り割り振った後に、引数が存在していたら後から絞り込む
-    # args.num_train_instances, args.num_dev_instances はともに int 型
-    if args.num_train_instances is not None:
-        train_data = train_data[0 : args.num_train_instances]
-    if args.num_dev_instances is not None:
-        dev_data = dev_data[0 : args.num_dev_instances]
-
-    logger.info("Load %d instances from train set." % (len(train_data)))
-    logger.info("Load %d instances from dev set." % (len(dev_data)))
-
-    # テストデータを用意する
-    if args.test_filepath is None:
-        print("test_filepath is not found")
-        return
-    test_data = dataset_reader.read(args.test_filepath)
-    logger.info("Load %d instances from test set." % (len(test_data)))
-
-    datasets = {"train": train_data, "validation": dev_data, "test": test_data}
-    # ここまでは理解した
-
+    datasets = get_datasets_ys()
     # すべてのdataset内のinstanceからvocabを作成している
     # TODO 具体的な詳細についてはあとからちゃんと見る
     vocab: Vocabulary = save_vocabulary(datasets=datasets, output_dir=args.output_dir)
@@ -149,16 +187,16 @@ def main():
         args=args,
         model=model,
         optimizer=optimizer,
-        train_data=train_data,
+        train_data=datasets["train"],
         train_iterator=train_iterator,
-        dev_data=dev_data,
+        dev_data=datasets["validation"],
         dev_iterator=dev_iterator,
     )
     logger.info(metrics)
 
     # 一番良かったデータに対してテストを行う
     model.load_state_dict(torch.load(os.path.join(args.output_dir, "best.th")))
-    test_metrics, test_preds = eval_op(args, model, test_data, dev_iterator)
+    test_metrics, test_preds = eval_op(args, model, datasets["test"], dev_iterator)
     logger.info(test_metrics)
     with open(os.path.join(args.output_dir, "test.pred"), "w") as f:
         for i in test_preds:
@@ -166,7 +204,9 @@ def main():
 
     # devが存在するときにはdevをやっている？
     if args.dev_filepath is not None:
-        dev_metrics, dev_preds = eval_op(args, model, dev_data, dev_iterator)
+        dev_metrics, dev_preds = eval_op(
+            args, model, datasets["validation"], dev_iterator
+        )
         logger.info(dev_metrics)
         with open(os.path.join(args.output_dir, "dev.pred"), "w") as f:
             for i in dev_preds:

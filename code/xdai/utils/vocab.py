@@ -7,7 +7,7 @@ import logging
 import os
 from collections import defaultdict
 
-from instance import Instance
+# from xdai.utils.instance import Instance
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,12 @@ class Vocabulary:
 
     """Update date: 2019-Nov-9"""
 
-    def save_to_files(self, directory):
+    def save_to_files(self, directory: str):
+        """_summary_
+        引数に指定した directory に語彙の情報を保存する
+        Args:
+            directory (str): _description_
+        """
         os.makedirs(directory, exist_ok=True)
         for namespace, mapping in self._index_to_item.items():
             with codecs.open(
@@ -126,7 +131,7 @@ class Vocabulary:
 
     @staticmethod
     def from_instances(
-        instances: list[Instance],
+        instances: list,  # list[Instance]なんだけど循環importのエラーが出るので仕方なく
         min_count: dict[str, int] | None = None,
         max_vocab_size: dict[str, int] | None = None,
     ) -> Vocabulary:
@@ -142,9 +147,8 @@ class Vocabulary:
         """
         counter: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         for instance in tqdm(instances):
-            # TODO 関数の引数にdictを与えてごにょごにょすることで、
-            # 副作用的にcounterの値が書き変わっている
-            # 正気か？
+            # 関数の引数にdictを与えてごにょごにょすることで、
+            # 副作用的にcounterの値を更新している
             instance.count_vocab_items(counter)
         return Vocabulary(
             counter=counter, min_count=min_count, max_vocab_size=max_vocab_size
