@@ -7,7 +7,6 @@ from xdai.utils.instance import ActionField, Instance, MetadataField, TextField
 from xdai.ner.transition_discontinuous.parsing import Parser
 from xdai.utils.token import Token
 import logging
-from xdai.utils.args import SimpleArgumentParser
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +16,12 @@ class DatasetReader:
     データセットを読み込むクラス
     """
 
-    def __init__(self, args: SimpleArgumentParser):
+    def __init__(self, model_type: str):
         """_summary_
         初期化する
         Args:
             args (_type_): _description_
         """
-        self.args: SimpleArgumentParser = args
         # parserを用意する
         self.parse: Parser = Parser()
         self._token_indexers: dict[
@@ -33,7 +31,7 @@ class DatasetReader:
             "token_characters": TokenCharactersIndexer(),
         }
 
-        if args.model_type == "elmo":
+        if model_type == "elmo":
             self._token_indexers["elmo_characters"] = ELMoIndexer()
 
     def read(self, filepath: str, training: bool = False) -> list[Instance]:
