@@ -297,8 +297,6 @@ class Mention(object):
             return []
         results = []
         for mention in mentions.split("|"):
-            indices_str: str
-            label: str
             indices_str, label = mention.split()
             indices: list[int] = [int(i) for i in indices_str.split(",")]
             results.append(Mention.create_mention(indices=indices, label=label))
