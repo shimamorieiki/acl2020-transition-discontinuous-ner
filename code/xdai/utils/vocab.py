@@ -192,7 +192,7 @@ class Vocabulary:
             self._item_to_index[namespace][item] = idx
             self._index_to_item[namespace][idx] = item
 
-    def get_index_to_item_vocabulary(self, namespace="tokens"):
+    def get_index_to_item_vocabulary(self, namespace: str = "tokens"):
         """_summary_
 
         Args:

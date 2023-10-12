@@ -2,7 +2,7 @@ import argparse
 import logging
 import os
 import sys
-from typing import List, NamedTuple
+from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class CustomSplitter:
             ["-", "/", ",", ")", "&", "(", "?", ".", "\\", ";", ":", "+", ">", "%"]
         )
 
-    def split_tokens(self, sentence: str) -> List[Token]:
+    def split_tokens(self, sentence: str) -> list[Token]:
         original_sentence = sentence
         sentence = list(sentence)
         sentence = "".join(

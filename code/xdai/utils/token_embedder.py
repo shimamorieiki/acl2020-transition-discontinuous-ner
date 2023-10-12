@@ -1,6 +1,5 @@
 import inspect
 import os
-from typing import Dict
 
 import numpy as np
 import torch
@@ -167,7 +166,7 @@ class TextFieldEmbedder(torch.nn.Module):
     """text_field_input is the output of a call to TextField.as_tensor (see instance.py).
     Each tensor in here is assumed to have a shape roughly similar to (batch_size, num_tokens)"""
 
-    def forward(self, text_field_input: Dict[str, torch.Tensor], **kwargs):
+    def forward(self, text_field_input: dict[str, torch.Tensor], **kwargs):
         outs = []
         for k in sorted(self.token_embedders.keys()):
             embedder = getattr(self, "token_embedder_%s" % k)

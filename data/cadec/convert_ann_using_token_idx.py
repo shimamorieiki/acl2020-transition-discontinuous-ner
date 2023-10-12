@@ -1,6 +1,5 @@
 """Update date: 2020-Jan-13"""
 import argparse
-from typing import List
 
 
 def parse_parameters(parser=None):
@@ -22,7 +21,7 @@ def parse_parameters(parser=None):
     return args
 
 
-def merge_consecutive_indices(indices: List[int]) -> List[int]:
+def merge_consecutive_indices(indices: list[int]) -> list[int]:
     """convert 136 142 143 147 into 136 147 (these two spans are actually consecutive),
     136 142 143 147 148 160 into 136 160 (these three spans are consecutive)
     it only makes sense when these indices are inclusive"""

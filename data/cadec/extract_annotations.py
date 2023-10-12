@@ -2,14 +2,12 @@
 import argparse
 import os
 import re
-import sys
-from typing import List
 
 
-def extract_indices_from_brat_annotation(indices: str) -> List[int]:
-    indices = re.findall(r"\d+", indices)
-    indices = sorted([int(i) for i in indices])
-    return indices
+def extract_indices_from_brat_annotation(indices: str) -> list[int]:
+    indices_list: list[int] = re.findall(r"\d+", indices)
+    indices_list = sorted([int(i) for i in indices])
+    return indices_list
 
 
 def parse_parameters(parser=None):
