@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Iterable, cast, Generator, Any
 from xdai.utils.vocab import Vocabulary
 from xdai.utils.instance import Instance
+import torch
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/data/dataset.py
 Update date: 2019-Nov-18"""
@@ -52,11 +53,13 @@ class Batch(Iterable):
 
         return padding_lengths
 
-    def as_tensor_dict(self, padding_lengths: dict[str, dict[str, int]] = {}):
+    def as_tensor_dict(
+        self, padding_lengths: dict[str, dict[str, int]] = {}
+    ) -> dict[str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]]:
         if padding_lengths is None:
             padding_lengths = defaultdict(dict)
-        instance_padding_lengths = self.get_padding_lengths()
-        lengths_to_use = defaultdict(dict)
+        instance_padding_lengths: dict[str, dict[str, int]] = self.get_padding_lengths()
+        lengths_to_use: dict[str, dict[str, int]] = defaultdict(dict)
         for field_name, instance_field_lengths in instance_padding_lengths.items():
             for padding_key in instance_field_lengths.keys():
                 if padding_key in padding_lengths[field_name]:
@@ -74,7 +77,9 @@ class Batch(Iterable):
                 field_tensors[field].append(tensors)
 
         field_classes = self.instances[0].fields
-        final_fields = {}
+        final_fields: dict[
+            str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]
+        ] = {}
         for field_name, field_tensor_list in field_tensors.items():
             final_fields[field_name] = field_classes[field_name].batch_tensors(
                 field_tensor_list
@@ -84,7 +89,7 @@ class Batch(Iterable):
     def __iter__(self):
         return iter(self.instances)
 
-    def index_instances(self, vocab):
+    def index_instances(self, vocab: Vocabulary):
         for instance in self.instances:
             instance.index_fields(vocab)
 
@@ -104,25 +109,48 @@ class _Iterator:
         self._batch_size: int = batch_size
         self._max_instances_in_memory: int | None = max_instances_in_memory
         self._cache_instances: bool = cache_instances
-        self._cache = defaultdict(list)
+        self._cache: dict[
+            int,
+            list[
+                dict[str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]]
+            ],
+        ] = defaultdict(list)
 
-    def __call__(self, instances, shuffle=True):
-        key = id(instances)
+    def __call__(
+        self, instances: list[Instance], shuffle: bool = True
+    ) -> Generator[
+        dict[str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]],
+        dict[str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]],
+        None,
+    ]:
+        """_summary_
+
+        Args:
+            instances (_type_): _description_
+            shuffle (bool, optional): _description_. Defaults to True.
+
+        Yields:
+            _type_: _description_
+        """
+        key: int = id(instances)
 
         if self._cache_instances and key in self._cache:
-            tensor_dicts = self._cache[key]
+            tensor_dicts: list = self._cache[key]
             if shuffle:
                 random.shuffle(tensor_dicts)
             for tensor_dict in tensor_dicts:
                 yield tensor_dict
         else:
+            # TODO create_batchesの型を明確にする
             batches = self._create_batches(instances, shuffle)
-            add_to_cache = self._cache_instances and key not in self._cache
+            add_to_cache: bool = self._cache_instances and key not in self._cache
             for batch in batches:
                 if self.vocab is not None:
                     batch.index_instances(self.vocab)
-                padding_lengths = batch.get_padding_lengths()
-                tensor_dict = batch.as_tensor_dict(padding_lengths)
+                padding_lengths: dict[str, dict[str, int]] = batch.get_padding_lengths()
+                tensor_dict: dict[
+                    str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]
+                ] = batch.as_tensor_dict(padding_lengths)
                 if add_to_cache:
                     self._cache[key].append(tensor_dict)
                 yield tensor_dict

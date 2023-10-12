@@ -180,7 +180,20 @@ class _ReduceModule(torch.nn.Module):
         super(_ReduceModule, self).__init__()
         self.reduce_linears = reduce_linears
 
-    def forward(self, left_cell, left_hidden, right_cell, right_hidden):
+    def forward(
+        self,
+        left_cell: torch.Tensor,
+        left_hidden: torch.Tensor,
+        right_cell: torch.Tensor,
+        right_hidden: torch.Tensor,
+    ):
+        # TODO tensorの値がnanなのでここも問題がある
+        # print("reduce_module")
+        # print(f"left_cell({type(left_cell)}): {left_cell}")
+        # print(f"left_hidden({type(left_hidden)}): {left_hidden}")
+        # print(f"right_cell({type(right_cell)}): {right_cell}")
+        # print(f"right_hidden({type(right_hidden)}): {right_hidden}")
+
         concate_hidden = torch.cat([left_hidden, right_hidden], 0)
         input_gate = torch.sigmoid(self.reduce_linears[0](concate_hidden))
         left_gate = torch.sigmoid(self.reduce_linears[1](concate_hidden))
@@ -235,7 +248,9 @@ class _Stack(object):
 
     def reduce(self, keep: str | None = None) -> None:
         """_summary_
-        reduce操作
+        reduce操作を実行する
+        reduceするだけ(REDUCE)とreduce後に元の2番目のものをreduceしたものの上に置くもの(REDUCE-LR)がある
+        具体的には a,b の様に並んでいるときに(bが上) a+b,a のようになるものを指す
         Args:
             keep (_type_, optional): _description_. Defaults to None.
         """
@@ -256,16 +271,53 @@ class _Stack(object):
         # reduce後に残す場合がある(right_reduce,left_reduce)
         if keep == "RIGHT":
             self._states.append((right_hidden, right_cell))
+            # rightを残すのでleft(stackでは上から2番目,listでは下から2番目)を消す
             self.stack_lstm.state.pop(-2)
         elif keep == "LEFT":
             self._states.append((left_hidden, left_cell))
-            self.stack_lstm.state.pop(-1)
+            # left を残すので right(stackでは一番上,listでは一番下)を消す
+            self.stack_lstm.state.pop()
         else:
             self.stack_lstm.state.pop()
             self.stack_lstm.state.pop()
 
         self._states.append((hidden, cell))
         self.stack_lstm.push(hidden)
+
+    def reduce_lr(self) -> None:
+        """_summary_
+        reduce-lr操作を実行する
+        reduceするだけ(REDUCE)とreduce後に元の2番目のものをreduceしたものの上に置くもの(REDUCE-LR)がある
+        具体的には a,b の様に並んでいるときに(bが上) a+b,a のようになるものを指す
+        本当は上のreduceと合わせるべきだが、一般化に頭を使いそうだったので一旦別のメソッドで実行する。
+        動くことを確認してから統合する
+        Args:
+            keep (_type_, optional): _description_. Defaults to None.
+        """
+        assert len(self._states) > 1
+        right_hidden: torch.Tensor
+        right_cell: torch.Tensor
+        left_hidden: torch.Tensor
+        left_cell: torch.Tensor
+        right_hidden, right_cell = self._states.pop()
+        left_hidden, left_cell = self._states.pop()
+
+        hidden: torch.Tensor
+        cell: torch.Tensor
+        hidden, cell = self.reduce_module(
+            left_cell, left_hidden, right_cell, right_hidden
+        )
+
+        # stackの上から2つを捨てる
+        self.stack_lstm.state.pop()
+        self.stack_lstm.state.pop()
+
+        # reduceしたもの, stack_item_l の順に追加する
+        self._states.append((hidden, cell))
+        self._states.append((left_hidden, left_cell))
+
+        self.stack_lstm.push(hidden)
+        self.stack_lstm.push(left_hidden)
 
     def top(self) -> torch.Tensor:
         """_summary_
@@ -289,6 +341,14 @@ class _Stack(object):
         """
         self._states.pop()
         self.stack_lstm.pop()
+
+    def complete_r(self) -> None:
+        """_summary_
+        completeするがそれ自身を使う可能性があるのでまた戻す
+        """
+        # 一度popしてもう一度同じものをpushするので実質何もしていないに等しい
+        # 意図的に何もしていないことを明示しておく
+        pass
 
     def __len__(self) -> int:
         return len(self._states)
@@ -315,9 +375,15 @@ class TransitionModel(torch.nn.Module):
     """
 
     def __init__(self, args: SimpleArgumentParser, vocab: Vocabulary):
+        """_summary_
+        初期化
+        Args:
+            args (SimpleArgumentParser): _description_
+            vocab (Vocabulary): _description_
+        """
         super(TransitionModel, self).__init__()
-        self.idx2action = vocab.get_index_to_item_vocabulary("actions")
-        self.action2idx = vocab.get_item_to_index_vocabulary("actions")
+        self.idx2action: dict[int, str] = vocab.get_index_to_item_vocabulary("actions")
+        self.action2idx: dict[str, int] = vocab.get_item_to_index_vocabulary("actions")
 
         self.text_filed_embedder = TextFieldEmbedder.create_embedder(args, vocab)
         self.action_embedding = Embedding(
@@ -330,7 +396,7 @@ class TransitionModel(torch.nn.Module):
             dropout=args.dropout,
             bidirectional=True,
         )
-        self.dropout = torch.nn.Dropout(args.dropout)
+        self.dropout: torch.nn.Dropout = torch.nn.Dropout(args.dropout)
         self.token_empty: torch.nn.Parameter = torch.nn.Parameter(
             torch.randn(args.lstm_cell_size * 2)
         )
@@ -394,28 +460,36 @@ class TransitionModel(torch.nn.Module):
             "total_pred_disc_mentions": 0,
         }
 
-    def _get_possible_actions(self, stack, buffer, previous_action_name=""):
-        valid_actions = []
+    def _get_possible_actions(
+        self, stack: _Stack, buffer: _Buffer, previous_action_name: str = ""
+    ) -> list[int]:
+        """_summary_
+        実行できる可能性のあるactionsのリストを取得する
+        Args:
+            stack (_Stack): _description_
+            buffer (_Buffer): _description_
+            previous_action_name (str, optional): _description_. Defaults to "".
+
+        Returns:
+            _type_: _description_
+        """
+        valid_actions: list[int] = []
 
         if len(buffer) > 0:
             valid_actions.append(self.action2idx["SHIFT"])
             valid_actions.append(self.action2idx["OUT"])
         if len(stack) >= 1:
-            valid_actions += [
-                i for i, a in self.idx2action.items() if a.startswith("COMPLETE")
-            ]
-            if len(stack) >= 2 and not previous_action_name in [
-                "LEFT-REDUCE",
-                "RIGHT-REDUCE",
-            ]:
-                valid_actions += [
-                    i for i, a in self.idx2action.items() if a.find("REDUCE") >= 0
-                ]
+            valid_actions.append(self.action2idx["COMPLETE"])
+            valid_actions.append(self.action2idx["COMPLETE-RIGHT"])
+        if len(stack) >= 2:
+            valid_actions.append(self.action2idx["REDUCE"])
+            valid_actions.append(self.action2idx["REDUCE-LR"])
+
         valid_actions = sorted(valid_actions)
         return valid_actions
 
-    def get_metrics(self, reset=False):
-        _metrics = {}
+    def get_metrics(self, reset: bool = False) -> dict[str, float]:
+        _metrics: dict[str, float] = {}
         _metrics["accuracy"] = (
             self._metric["correct_actions"] / self._metric["total_actions"]
             if self._metric["total_actions"] > 0
@@ -468,19 +542,21 @@ class TransitionModel(torch.nn.Module):
 
         if reset:
             self._metric = {
-                "correct_actions": 0,
-                "total_actions": 0,
-                "correct_mentions": 0,
-                "total_gold_mentions": 0,
-                "total_pred_mentions": 0,
-                "correct_disc_mentions": 0,
-                "total_gold_disc_mentions": 0,
-                "total_pred_disc_mentions": 0,
+                "correct_actions": 0.0,
+                "total_actions": 0.0,
+                "correct_mentions": 0.0,
+                "total_gold_mentions": 0.0,
+                "total_pred_mentions": 0.0,
+                "correct_disc_mentions": 0.0,
+                "total_gold_disc_mentions": 0.0,
+                "total_pred_disc_mentions": 0.0,
             }
 
         return _metrics
 
-    def _build_state_representation(self, buffer, stack, action_history):
+    def _build_state_representation(
+        self, buffer: _Buffer, stack: _Stack, action_history: _StackLSTM
+    ):
         top3_stack, top2_stack, top1_stack = stack.top3()
         buffer_outputs = torch.unsqueeze(buffer.sentence, 0)
         top1_attn_weights = self.stack1_attention(
@@ -516,81 +592,116 @@ class TransitionModel(torch.nn.Module):
         )
         return features
 
-    def _apply_action(self, stack, buffer, action_name):
-        if action_name == "SHIFT":
-            stack.shift(buffer.pop().cuda())
-        elif action_name.startswith("OUT"):
-            buffer.pop()
-        elif action_name.startswith("COMPLETE"):
-            stack.pop()
-        elif action_name.find("REDUCE") >= 0:
-            if action_name.startswith("LEFT"):
-                stack.reduce(keep="LEFT")
-            elif action_name.startswith("RIGHT"):
-                stack.reduce(keep="RIGHT")
-            else:
+    def _apply_action(
+        self, stack: _Stack, buffer: _Buffer, action_name: str
+    ) -> tuple[_Stack, _Buffer]:
+        """_summary_
+        実際のactionを当てはめる
+        Args:
+            stack (_type_): _description_
+            buffer (_type_): _description_
+            action_name (_type_): _description_
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            _type_: _description_
+        """
+        match action_name:
+            case "SHIFT":
+                stack.shift(buffer.pop().cuda())
+            case "OUT":
+                buffer.pop()
+            case "COMPLETE":
+                stack.pop()
+            case "COMPLETE-RIGHT":
+                stack.complete_r()
+            case "REDUCE":
                 stack.reduce()
-        else:
-            raise ValueError
+            case "REDUCE-LR":
+                stack.reduce_lr()
+            case _:
+                raise ValueError
         return stack, buffer
 
-    def forward(self, tokens, actions, annotations, **kwargs):
-        embedded_tokens = self.dropout(self.text_filed_embedder(tokens))
+    def forward(
+        self,
+        tokens: dict[str, torch.Tensor],
+        actions: torch.Tensor,
+        annotations: list[str],
+        **kwargs,
+    ):
+        """_summary_
+        transitionModelの順伝播部分
+        Args:
+            tokens (dict[str, torch.Tensor]): _description_
+            actions (list[str]): _description_
+            annotations (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        # annotationsの値は複数(今回は8つ)の要素をまとめたbatchをまとめて表示している
+        # ['0,3 bef1|4,10 aft1', '7,16 bef1|18,26 aft1', '', '', '15,18 bef1|20,31 aft1|33,42 aft1', '', '16,19 bef1|20,23 aft1', '']
+        embedded_tokens: torch.Tensor = self.dropout(self.text_filed_embedder(tokens))
         mask = TextField.get_text_field_mask(tokens)
         sequence_lengths = mask.sum(dim=1).detach().cpu().numpy()
-        encoded_tokens = self.dropout(self.encoder(embedded_tokens, mask))
+        encoded_tokens: torch.Tensor = self.dropout(self.encoder(embedded_tokens, mask))
 
         batch_size, _, _ = encoded_tokens.size()
 
-        total_loss = 0
-        preds = []
+        total_loss: int | torch.Tensor = 0
+        preds: list[str] = []
         for i in range(batch_size):
-            gold_actions, pred_actions = [], []
-
-            stack = _Stack(
+            gold_actions: list[int] = []
+            pred_actions: list[int] = []
+            stack: _Stack = _Stack(
                 self.stack_lstm,
                 self.stack_lstm_initial,
                 self.leaf_input_linear,
                 self.leaf_output_linear,
                 self.reduce_module,
             )
-            action_history = _StackLSTM(self.action_lstm, self.action_lstm_initial)
-            buffer = _Buffer(
+            action_history: _StackLSTM = _StackLSTM(
+                self.action_lstm, self.action_lstm_initial
+            )
+            buffer: _Buffer = _Buffer(
                 encoded_tokens[i][0 : sequence_lengths[i]], self.token_empty
             )
-            previous_action_name = ""
+            previous_action_name: str = ""
 
             if self.training:
                 for j in range(len(actions[i])):
-                    gold_action = actions[i][j]
+                    gold_action: torch.Tensor | int = actions[i][j]
                     if type(gold_action) != int:
                         gold_action = gold_action.cpu().data.numpy().item()
                     if gold_action == 0:
                         break
 
-                    valid_actions = self._get_possible_actions(
-                        stack, buffer, previous_action_name
-                    )
-                    # TODO 多分actionsのラベルが一致していないので
-                    # ここでエラーが出るのはそりゃそうって感じだと思う
+                    valid_actions: list[int] | dict[
+                        int, int
+                    ] = self._get_possible_actions(stack, buffer, previous_action_name)
                     assert gold_action in valid_actions
                     gold_actions.append(gold_action)
-                    gold_action_name = self.idx2action[gold_action]
+                    gold_action_name: str = self.idx2action[gold_action]
                     previous_action_name = gold_action_name
 
                     if len(valid_actions) == 1:
-                        pred_action = valid_actions[0]
+                        pred_action: int = valid_actions[0]
                         assert pred_action == gold_action
                     else:
-                        features = self._build_state_representation(
+                        features: torch.Tensor = self._build_state_representation(
                             buffer, stack, action_history
                         )
                         features = F.relu(self.hidden2feature(self.dropout(features)))
-                        logits = self.feature2action(features)[
+                        logits: torch.Tensor = self.feature2action(features)[
                             torch.LongTensor(valid_actions).cuda()
                         ]
-                        log_probs = torch.nn.functional.log_softmax(logits, 0)
-                        pred_action = valid_actions[
+                        log_probs: torch.Tensor = torch.nn.functional.log_softmax(
+                            logits, 0
+                        )
+                        pred_action: int = valid_actions[
                             torch.max(logits.cpu(), 0)[1].data.numpy().item()
                         ]
 

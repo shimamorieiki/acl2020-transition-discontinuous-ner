@@ -1,12 +1,10 @@
 import itertools
-from typing import List
-
 import torch
 
 """Update date: 2019-Nov-5"""
 
 
-def block_orthogonal(tensor, split_sizes: List[int], gain=1.0):
+def block_orthogonal(tensor: torch.Tensor, split_sizes: list[int], gain: int = 1):
     # tensor: the tensor to initialize
     # split_sizes: [10, 20] result in the tensor being split into chunks of size 10 along the first dimension
     # 20 along the second
@@ -39,7 +37,7 @@ def block_orthogonal(tensor, split_sizes: List[int], gain=1.0):
 Update date: 2019-Nov-6"""
 
 
-def clamp_tensor(tensor, minimum, maximum):
+def clamp_tensor(tensor: torch.Tensor, minimum: float, maximum: float) -> torch.Tensor:
     if tensor.is_sparse:
         coalesced_tensor = tensor.coalesce()
 
@@ -52,15 +50,18 @@ def clamp_tensor(tensor, minimum, maximum):
 """Update date: 2019-Nov-7"""
 
 
-def enable_gradient_clipping(model, grad_clipping) -> None:
-    if grad_clipping is not None:
-        for parameter in model.parameters():
-            if parameter.requires_grad:
-                parameter.register_hook(
-                    lambda grad: clamp_tensor(
-                        grad, minimum=-grad_clipping, maximum=grad_clipping
-                    )
+def enable_gradient_clipping(
+    model: torch.nn.Module, grad_clipping: float | None
+) -> None:
+    if grad_clipping is None:
+        return
+    for parameter in model.parameters():
+        if parameter.requires_grad:
+            parameter.register_hook(
+                lambda grad: clamp_tensor(
+                    grad, minimum=-grad_clipping, maximum=grad_clipping
                 )
+            )
 
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/modules/highway.py
@@ -76,7 +77,7 @@ class Highway(torch.nn.Module):
     """_summary_
     多分ここにあるhighway networkの事な気がする
     https://cvml-expertguide.net/terms/dl/cnn/cnn-backbone/#221_Highway_network
-    
+
     Highway network [Srivastava et al., 2015a] は，
     層間のスキップ接続を画像CNNに使用することを提案したネットワークである.
     Highway networkは,2つのゲート機構を用いて,
@@ -89,7 +90,7 @@ class Highway(torch.nn.Module):
     def __init__(self, input_dim, num_layers=1):
         super(Highway, self).__init__()
 
-        self._layers = torch.nn.ModuleList(
+        self._layers: torch.nn.ModuleList = torch.nn.ModuleList(
             [torch.nn.Linear(input_dim, input_dim * 2) for _ in range(num_layers)]
         )
         for layer in self._layers:
@@ -115,25 +116,27 @@ class Highway(torch.nn.Module):
 Update date: 2019-April-26"""
 
 
-def masked_softmax(vector, mask=None):
+def masked_softmax(vector, mask=None) -> torch.Tensor:
     if mask is None:
         return torch.nn.functional.softmax(vector, dim=-1)
-    else:
-        mask = mask.float()
-        assert mask.dim() == vector.dim()
-        # use a very large negative number for those masked positions
-        # so that the probabilities of those positions would be approximately 0.
-        # This is not accurate in math, but works for most cases and consumes less memory.
-        masked_vector = vector.masked_fill((1 - mask).byte(), -1e32)
-        return torch.nn.functional.softmax(masked_vector, dim=-1)
+
+    mask = mask.float()
+    assert mask.dim() == vector.dim()
+    # use a very large negative number for those masked positions
+    # so that the probabilities of those positions would be approximately 0.
+    # This is not accurate in math, but works for most cases and consumes less memory.
+    masked_vector = vector.masked_fill((1 - mask).byte(), -1e32)
+    return torch.nn.functional.softmax(masked_vector, dim=-1)
 
 
 """Update date: 2019-Nov-7"""
 
 
-def rescale_gradients(model, grad_norm):
+def rescale_gradients(model: torch.nn.Module, grad_norm: float | None):
     if grad_norm:
-        parameters = [p for p in model.parameters() if p.grad is not None]
+        parameters: list[torch.nn.Parameter] = [
+            p for p in model.parameters() if p.grad is not None
+        ]
         return sparse_clip_norm(parameters, grad_norm)
     return None
 
@@ -178,23 +181,30 @@ class ScalarMix(torch.nn.Module):
 """Update date: 2019-Nov-7"""
 
 
-def sparse_clip_norm(parameters, max_norm: float):
+def sparse_clip_norm(
+    parameters: list[torch.nn.Parameter], max_norm: float
+) -> torch.Tensor:
     parameters = list(filter(lambda p: p.grad is not None, parameters))
     total_norm = 0
     for p in parameters:
+        if p.grad is None:
+            raise ValueError("p.gradの値がNone")
+
         if p.grad.is_sparse:
-            grad = p.grad.data.coalesce()
-            param_norm = grad._values().norm(2.0)
+            grad: torch.Tensor = p.grad.data.coalesce()
+            param_norm: torch.Tensor = grad._values().norm(2.0)
         else:
-            param_norm = p.grad.data.norm(2.0)
+            param_norm: torch.Tensor = p.grad.data.norm(2.0)
 
         total_norm += param_norm**2.0
 
     total_norm = total_norm ** (1.0 / 2.0)
 
-    clip_coef = max_norm / (total_norm + 1e-6)
+    clip_coef: torch.Tensor = max_norm / (total_norm + 1e-6)
     if clip_coef < 1:
         for p in parameters:
+            if p.grad is None:
+                raise ValueError("p.gradの値がNone")
             if p.grad.is_sparse:
                 p.grad.data._values().mul_(clip_coef)
             else:
@@ -213,19 +223,18 @@ class TimeDistributed(torch.nn.Module):
         super(TimeDistributed, self).__init__()
         self._module = module
 
-    def forward(self, *inputs):
-        reshaped_inputs = []
-
+    def forward(self, *inputs: torch.Tensor) -> torch.Tensor:
+        reshaped_inputs: list[torch.Tensor] = []
         for input_tensor in inputs:
-            input_size = input_tensor.size()
+            input_size: torch.Size = input_tensor.size()
             assert len(input_size) > 2
-            squashed_shape = [-1] + [x for x in input_size[2:]]
+            squashed_shape: list[int] = [-1] + [x for x in input_size[2:]]
             reshaped_inputs.append(input_tensor.contiguous().view(*squashed_shape))
 
-        reshaped_outputs = self._module(*reshaped_inputs)
+        reshaped_outputs: torch.Tensor = self._module(*reshaped_inputs)
 
         original_shape = [input_size[0], input_size[1]] + [
             x for x in reshaped_outputs.size()[1:]
         ]
-        outputs = reshaped_outputs.contiguous().view(*original_shape)
+        outputs: torch.Tensor = reshaped_outputs.contiguous().view(*original_shape)
         return outputs

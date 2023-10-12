@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import shutil
-
+from typing import Any
 import torch
 from tqdm import tqdm
 from xdai.utils.common import move_to_gpu
@@ -94,10 +94,14 @@ class MetricTracker:
 Update date: 2019-March-03"""
 
 
-def _batch_loss(args, model, batch):
+def _batch_loss(
+    args: SimpleArgumentParser, model: TransitionModel, batch
+) -> torch.Tensor:
     batch = move_to_gpu(batch, cuda_device=args.cuda_device[0])
-    output_dict = model(**batch)
-    loss = output_dict.get("loss")
+    output_dict: dict[str, Any] = model(**batch)
+    loss: torch.Tensor | None = output_dict.get("loss")
+    if loss is None:
+        raise ValueError("output_dict中にlossが含まれていない")
     return loss
 
 
@@ -105,11 +109,21 @@ def _batch_loss(args, model, batch):
 Update date: 2019-April-20"""
 
 
-def _get_val_loss(args, model, iterator, data):
+def _get_val_loss(
+    args: SimpleArgumentParser,
+    model: TransitionModel,
+    iterator: _Iterator,
+    data: list[Instance],
+) -> float:
+    print("これがdataの中身")
+    print([datum for datum in data])
+    print(data)
     model.eval()
     generator = iterator(data, shuffle=False)
-    total_loss, batch_counter = 0.0, 0
+    total_loss: float = 0.0
+    batch_counter: int = 0
     for batch in generator:
+        print(f"batch({type(batch)}): {batch}")
         batch_counter += 1
         _loss = _batch_loss(args, model, batch)
         if isinstance(_loss, float):
@@ -123,32 +137,42 @@ def _get_val_loss(args, model, iterator, data):
 """Update date: 2019-April-20"""
 
 
-def _is_best_model_so_far(this_epoch_score: float, score_per_epoch: list[float]):
-    if not score_per_epoch:
-        return True
-    else:
+def _is_best_model_so_far(
+    this_epoch_score: float, score_per_epoch: list[float]
+) -> bool:
+    if score_per_epoch:
         return this_epoch_score > max(score_per_epoch)
+    return True
 
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py
 Update date: 2019-April-20"""
 
 
-def _output_metrics_to_console(train_metrics, dev_metrics={}):
-    metric_names = list(train_metrics.keys()) + list(dev_metrics.keys())
-    metric_names = list(set(metric_names))
-    train_metrics = ["%s: %s" % (k, str(train_metrics.get(k, 0))) for k in metric_names]
-    logger.info(" # Train set \n     %s" % ("; ".join(train_metrics)))
-    dev_metrics = ["%s: %s" % (k, str(dev_metrics.get(k, 0))) for k in metric_names]
-    logger.info(" # Dev set \n     %s" % ("; ".join(dev_metrics)))
+def _output_metrics_to_console(
+    train_metrics: dict[str, float], dev_metrics: dict[str, float] = {}
+) -> None:
+    metric_names: list[str] = list(
+        set(list(train_metrics.keys()) + list(dev_metrics.keys()))
+    )
+    train_metrics_format: list[str] = [
+        "%s: %s" % (k, str(train_metrics.get(k, 0))) for k in metric_names
+    ]
+    logger.info(" # Train set \n     %s" % ("; ".join(train_metrics_format)))
+    dev_metrics_format: list[str] = [
+        "%s: %s" % (k, str(dev_metrics.get(k, 0))) for k in metric_names
+    ]
+    logger.info(" # Dev set \n     %s" % ("; ".join(dev_metrics_format)))
 
 
 """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#_save_checkpoint
 Update date: 2019-Nov-9"""
 
 
-def _save_checkpoint(model_dir, model, epoch, is_best=False):
-    model_path = os.path.join(model_dir, "epoch_%s.th" % epoch)
+def _save_checkpoint(
+    model_dir: str, model: TransitionModel, epoch: int, is_best: bool = False
+):
+    model_path: str = os.path.join(model_dir, "epoch_%s.th" % epoch)
     torch.save(model.state_dict(), model_path)
     if is_best:
         logger.info(
@@ -161,7 +185,7 @@ def _save_checkpoint(model_dir, model, epoch, is_best=False):
 Update date: 2019-April-20"""
 
 
-def _should_early_stop(score_per_epoch: list[float], patience=0):
+def _should_early_stop(score_per_epoch: list[float], patience: int = 0) -> bool:
     if patience > 0 and patience < len(score_per_epoch):
         return max(score_per_epoch[-patience:]) <= max(score_per_epoch[:-patience])
     return False
@@ -174,27 +198,28 @@ Update date: 2019-Nov-9"""
 def _train_epoch(
     args: SimpleArgumentParser,
     model: TransitionModel,
-    optimizer,
-    iterator,
-    data,
+    optimizer: torch.optim.Optimizer,
+    iterator: _Iterator,
+    data: list[Instance],
     shuffle=True,
-):
+) -> dict[str, float]:
     model.train()
-    total_loss = 0.0
+    total_loss: float = 0.0
+    # iteratorの型が分からない
     generator = iterator(data, shuffle=shuffle)
-    num_batches = iterator.get_num_batches(data)
-    batch_counter = 0
+    num_batches: int = iterator.get_num_batches(data)
+    batch_counter: int = 0
 
     for batch in generator:
         batch_counter += 1
         optimizer.zero_grad()
-        loss = _batch_loss(args, model, batch)
+        loss: torch.Tensor = _batch_loss(args, model, batch)
         loss.backward()
         total_loss += loss.item()
         rescale_gradients(model, args.max_grad_norm)
         optimizer.step()
 
-        metrics = model.get_metrics(reset=False)
+        metrics: dict[str, float] = model.get_metrics(reset=False)
         metrics["loss"] = (
             float(total_loss / batch_counter) if batch_counter > 0 else 0.0
         )
@@ -214,8 +239,10 @@ def _train_epoch(
 
 
 def _check_max_save_checkpoints(
-    output_dir, max_save_checkpoints, pattern=("epoch_", ".th")
-):
+    output_dir: str,
+    max_save_checkpoints: int,
+    pattern: tuple[str, str] = ("epoch_", ".th"),
+) -> None:
     if max_save_checkpoints < 0:
         return None
     checkpoints = [
@@ -225,7 +252,7 @@ def _check_max_save_checkpoints(
     ]
     if len(checkpoints) > max_save_checkpoints:
         numbers = sorted(
-            [int(re.findall("\d+", filename)[0]) for filename in checkpoints],
+            [int(re.findall(r"\d+", filename)[0]) for filename in checkpoints],
             reverse=True,
         )
         for n in numbers[max_save_checkpoints:]:
@@ -244,7 +271,7 @@ def train_op(
     train_iterator: _Iterator,
     dev_data: list[Instance],
     dev_iterator: _Iterator,
-):
+) -> dict[str, int | float]:
     enable_gradient_clipping(model, args.grad_clipping)
     model_dir: str = args.output_dir
     max_epoches: int = args.num_train_epochs
@@ -252,18 +279,18 @@ def train_op(
     # TODO 本当はargsの引数で変更すべきだとは思うが、取りあえずは決め打ち
     validation_metric = "f1-overall"  # args.eval_metric
 
-    validation_metric_per_epoch = []
-    metrics = {}
+    validation_metric_per_epoch: list[float] = []
+    metrics: dict[str, int | float] = {}
 
     for epoch in range(0, max_epoches):
         logger.info("Epoch %d/%d" % (epoch + 1, max_epoches))
         train_metrics = _train_epoch(args, model, optimizer, train_iterator, train_data)
         with torch.no_grad():
-            val_loss = _get_val_loss(args, model, dev_iterator, dev_data)
-            val_metrics = model.get_metrics(reset=True)
+            val_loss: float = _get_val_loss(args, model, dev_iterator, dev_data)
+            val_metrics: dict[str, float] = model.get_metrics(reset=True)
             val_metrics["loss"] = val_loss
-            this_epoch_val_metric = val_metrics[validation_metric]
-            is_best = _is_best_model_so_far(
+            this_epoch_val_metric: float = val_metrics[validation_metric]
+            is_best: bool = _is_best_model_so_far(
                 this_epoch_val_metric, validation_metric_per_epoch
             )
             validation_metric_per_epoch.append(this_epoch_val_metric)
@@ -293,17 +320,26 @@ def train_op(
 """Update date: 2019-Nov-7"""
 
 
-def eval_op(args, model, data, data_iterator):
-    sentences, predictions = [], []
+def eval_op(
+    args: SimpleArgumentParser,
+    model: TransitionModel,
+    data: list[Instance],
+    data_iterator: _Iterator,
+) -> tuple[dict[str, float], list[tuple]]:
+    sentences = []
+    predictions = []
     with torch.no_grad():
         model.eval()
         generator = data_iterator(data, shuffle=False)
-        total_loss = 0.0
+        total_loss: float = 0.0
         for batch in tqdm(generator, desc="Evaluating"):
             sentences += batch["sentence"]
             batch = move_to_gpu(batch, args.cuda_device[0])
             output_dict = model(**batch)
-            loss = output_dict.get("loss", None)
+            print("output_dict")
+            print(output_dict)
+            print(type(output_dict))
+            loss: torch.Tensor | None = output_dict.get("loss", None)
             predictions += output_dict.get("preds")
             if loss:
                 total_loss += loss.item()

@@ -67,17 +67,17 @@ class ActionField:
         """
         return {"num_tokens": self.inputs.sequence_length() * 2}
 
-    def as_tensor(self, padding_lengths: dict[str, int]):
+    def as_tensor(self, padding_lengths: dict[str, int]) -> torch.LongTensor | None:
         if self._indexed_actions is None:
             print("self._indexed_actionsがNoneです")
             return
-        desired_num_actions = padding_lengths["num_tokens"]
+        desired_num_actions: int = padding_lengths["num_tokens"]
         padded_actions = pad_sequence_to_length(
             self._indexed_actions, desired_num_actions
         )
         return torch.LongTensor(padded_actions)
 
-    def batch_tensors(self, tensor_list):
+    def batch_tensors(self, tensor_list: list[torch.Tensor]) -> torch.Tensor:
         return torch.stack(tensor_list)
 
 
@@ -120,7 +120,7 @@ class MetadataField(_Field):
         return MetadataField(None)
 
     @classmethod
-    def batch_tensors(cls, tensor_list):
+    def batch_tensors(cls, tensor_list: list[torch.Tensor]) -> list[torch.Tensor]:
         return tensor_list
 
 
@@ -128,14 +128,16 @@ class MetadataField(_Field):
 Update date: 2019-Nov-5"""
 
 
-def _batch_tensor_dicts(tensor_dicts):
+def _batch_tensor_dicts(
+    tensor_dicts: list[dict[str, torch.Tensor]]
+) -> dict[str, torch.Tensor]:
     """takes a list of tensor dictionaries, returns a single dictionary with all tensors with the same key batched"""
-    key_to_tensors = defaultdict(list)
+    key_to_tensors: dict[str, list[torch.Tensor]] = defaultdict(list)
     for tensor_dict in tensor_dicts:
         for key, tensor in tensor_dict.items():
             key_to_tensors[key].append(tensor)
 
-    batched_tensors = {}
+    batched_tensors: dict[str, torch.Tensor] = {}
     for key, tensor_list in key_to_tensors.items():
         batched_tensor = torch.stack(tensor_list)
         batched_tensors[key] = batched_tensor
@@ -284,7 +286,9 @@ class TextField(_Field):
             text_field._indexer_name_to_indexed_token[indexer_name] = array_keys
         return text_field
 
-    def batch_tensors(self, tensor_dicts):
+    def batch_tensors(
+        self, tensor_dicts: list[dict[str, torch.Tensor]]
+    ) -> dict[str, torch.Tensor]:
         return _batch_tensor_dicts(tensor_dicts)
 
     """Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/nn/util.py#get_text_field_mask"""
@@ -349,7 +353,7 @@ class Instance:
         for field in self.fields.values():
             field.count_vocab_items(counter)
 
-    def index_fields(self, vocab):
+    def index_fields(self, vocab: Vocabulary):
         """_summary_
         TODO これは何？
         Args:
@@ -371,7 +375,7 @@ class Instance:
             lengths[field_name] = field.get_padding_lengths()
         return lengths
 
-    def as_tensor_dict(self, padding_lengths):
+    def as_tensor_dict(self, padding_lengths: dict[str, dict[str, int]]):
         """_summary_
         # TODO なにこれ
         Args:
@@ -381,7 +385,7 @@ class Instance:
             _type_: _description_
         """
         padding_lengths = padding_lengths or self.get_padding_lengths()
-        tensors = {}
+        tensors: dict[str, torch.Tensor] = {}
         for field_name, field in self.fields.items():
             tensors[field_name] = field.as_tensor(padding_lengths[field_name])
         return tensors
