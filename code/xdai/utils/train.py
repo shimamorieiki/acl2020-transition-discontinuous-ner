@@ -95,10 +95,18 @@ Update date: 2019-March-03"""
 
 
 def _batch_loss(
-    args: SimpleArgumentParser, model: TransitionModel, batch
+    args: SimpleArgumentParser,
+    model: TransitionModel,
+    batch: dict[
+        str,
+        torch.Tensor | dict[str, torch.Tensor] | list[str] | tuple[torch.Tensor, ...],
+    ],
 ) -> torch.Tensor:
+    # print(type(batch))
+    # print(batch)
     batch = move_to_gpu(batch, cuda_device=args.cuda_device[0])
     output_dict: dict[str, Any] = model(**batch)
+    # print("output_dict: ", output_dict)
     loss: torch.Tensor | None = output_dict.get("loss")
     if loss is None:
         raise ValueError("output_dict中にlossが含まれていない")
@@ -115,15 +123,15 @@ def _get_val_loss(
     iterator: _Iterator,
     data: list[Instance],
 ) -> float:
-    print("これがdataの中身")
-    print([datum for datum in data])
-    print(data)
+    # print("これがdataの中身")
+    # print([datum for datum in data])
+    # print(data)
     model.eval()
     generator = iterator(data, shuffle=False)
     total_loss: float = 0.0
     batch_counter: int = 0
     for batch in generator:
-        print(f"batch({type(batch)}): {batch}")
+        # print(f"batch({type(batch)}): {batch}")
         batch_counter += 1
         _loss = _batch_loss(args, model, batch)
         if isinstance(_loss, float):
@@ -211,9 +219,11 @@ def _train_epoch(
     batch_counter: int = 0
 
     for batch in generator:
+        # print("batch: ", batch_counter)
         batch_counter += 1
         optimizer.zero_grad()
         loss: torch.Tensor = _batch_loss(args, model, batch)
+        # print("loss: ", loss)
         loss.backward()
         total_loss += loss.item()
         rescale_gradients(model, args.max_grad_norm)
@@ -230,7 +240,8 @@ def _train_epoch(
                 % (batch_counter, num_batches, metrics["loss"])
             )
 
-    metrics = model.get_metrics(reset=True)
+    metrics = model.get_metrics(reset=False)
+    print("resetしないで取得したmetrics: ", metrics)
     metrics["loss"] = float(total_loss / batch_counter) if batch_counter > 0 else 0.0
     return metrics
 
@@ -285,6 +296,7 @@ def train_op(
     for epoch in range(0, max_epoches):
         logger.info("Epoch %d/%d" % (epoch + 1, max_epoches))
         train_metrics = _train_epoch(args, model, optimizer, train_iterator, train_data)
+        print(f"train_opの中のtrain_metrics: {train_metrics}")
         with torch.no_grad():
             val_loss: float = _get_val_loss(args, model, dev_iterator, dev_data)
             val_metrics: dict[str, float] = model.get_metrics(reset=True)
@@ -336,9 +348,9 @@ def eval_op(
             sentences += batch["sentence"]
             batch = move_to_gpu(batch, args.cuda_device[0])
             output_dict = model(**batch)
-            print("output_dict")
-            print(output_dict)
-            print(type(output_dict))
+            # print("output_dict")
+            # print(output_dict)
+            # print(type(output_dict))
             loss: torch.Tensor | None = output_dict.get("loss", None)
             predictions += output_dict.get("preds")
             if loss:

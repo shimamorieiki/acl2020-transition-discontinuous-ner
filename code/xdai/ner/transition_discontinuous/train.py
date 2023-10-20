@@ -182,7 +182,6 @@ def main():
     optimizer = torch.optim.Adam(parameters, lr=args.learning_rate)
 
     # これが学習を行っている箇所
-    # この中も後から見るが今は別に関係ない
     metrics = train_op(
         args=args,
         model=model,
@@ -192,12 +191,12 @@ def main():
         dev_data=datasets["validation"],
         dev_iterator=dev_iterator,
     )
-    logger.info(metrics)
+    logger.info(f"metrics: {metrics}")
 
     # 一番良かったデータに対してテストを行う
     model.load_state_dict(torch.load(os.path.join(args.output_dir, "best.th")))
     test_metrics, test_preds = eval_op(args, model, datasets["test"], dev_iterator)
-    logger.info(test_metrics)
+    logger.info(f"test_metrics: {test_metrics}")
     with open(os.path.join(args.output_dir, "test.pred"), "w") as f:
         for i in test_preds:
             f.write("%s\n%s\n\n" % (i[0], i[1]))

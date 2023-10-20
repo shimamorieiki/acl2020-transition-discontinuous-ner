@@ -38,7 +38,7 @@ def parse_parameters_without_type():
     parser.add_argument("--stars", default=None, type=int)
 
     args, cant_parsed = parser.parse_known_args()
-    print(args, cant_parsed)
+    # print(args, cant_parsed)
 
     return args
 
@@ -46,5 +46,5 @@ def parse_parameters_without_type():
 if __name__ == "__main__":
     args = parse_parameters()
     # args = parse_parameters_without_type()
-    print(args.name, args.stars)
+    # print(args.name, args.stars)
     # print("ok")

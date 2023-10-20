@@ -253,7 +253,7 @@ if __name__ == "__main__":
     # read(sentences=sentences)
     # sentence = "ab cd"
     tokens = [Token(t, 0) for t in sentence.strip().split()]
-    print(tokens)
+    # print(tokens)
 
     annotations = (
         "0,2 ADR|4,5 ADR|7,8 ADR|10,13 ADR|15,15 ADR|17,21 ADR|24,24 ADR|27,28 ADR"
@@ -263,4 +263,4 @@ if __name__ == "__main__":
         mentions_str=annotations, sentence_length=len(tokens)
     )
 
-    print(actions)
+    # print(actions)

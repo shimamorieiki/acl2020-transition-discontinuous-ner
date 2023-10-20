@@ -6,6 +6,9 @@ import torch
 from xdai.elmo.models import Elmo
 from xdai.utils.nn import TimeDistributed
 from xdai.utils.seq2vec import CnnEncoder
+from xdai.utils.args import SimpleArgumentParser
+from xdai.utils.vocab import Vocabulary
+from typing import Any
 
 """Update date: 2019-Nov-5"""
 
@@ -111,11 +114,13 @@ class ElmoTokenEmbedder(torch.nn.Module):
 """Update date: 2019-Nov-5"""
 
 
-def _load_pretrained_embeddings(filepath, dimension, token2idx):
-    tokens_to_keep = set(token2idx.keys())
-    embeddings = {}
+def _load_pretrained_embeddings(
+    filepath: str, dimension: int, token2idx: dict[str, int]
+):
+    tokens_to_keep: set[str] = set(token2idx.keys())
+    embeddings: dict[str, np.ndarray[Any, np.dtype[np.float64]]] = {}
     if filepath != "" and os.path.isfile(filepath):
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(file=filepath, mode="r", encoding="utf-8") as f:
             for line in f:
                 sp = line.strip().split(" ")
                 if len(sp) <= dimension:
@@ -124,17 +129,19 @@ def _load_pretrained_embeddings(filepath, dimension, token2idx):
                 if token not in tokens_to_keep:
                     continue
                 embeddings[token] = np.array([float(x) for x in sp[1:]])
-
     print(
         " # Load %d out of %d words (%d-dimensional) from pretrained embedding file (%s)!"
         % (len(embeddings), len(token2idx), dimension, filepath)
     )
 
-    all_embeddings = np.asarray(list(embeddings.values()))
-    embeddings_mean = float(np.mean(all_embeddings))
-    embeddings_std = float(np.std(all_embeddings))
+    all_embeddings: np.ndarray[Any, np.dtype[np.float64]] = np.asarray(
+        list(embeddings.values())
+    )
 
-    weights = np.random.normal(
+    embeddings_mean: float = float(np.mean(all_embeddings))
+    embeddings_std: float = float(np.std(all_embeddings))
+
+    weights: np.ndarray[Any, np.dtype[np.float64]] = np.random.normal(
         embeddings_mean, embeddings_std, size=(len(token2idx), dimension)
     )
     for token, i in token2idx.items():
@@ -192,13 +199,14 @@ class TextFieldEmbedder(torch.nn.Module):
         return torch.cat(outs, dim=-1)
 
     @classmethod
-    def tokens_embedder(cls, vocab, args):
+    def tokens_embedder(cls, vocab: Vocabulary, args: SimpleArgumentParser):
         token2idx = vocab.get_item_to_index_vocabulary("tokens")
+        dimension = 300
         weight = _load_pretrained_embeddings(
-            args.pretrained_word_embeddings, dimension=100, token2idx=token2idx
+            args.pretrained_word_embeddings, dimension=dimension, token2idx=token2idx
         )
         return Embedding(
-            len(token2idx), embedding_dim=100, weight=torch.FloatTensor(weight)
+            len(token2idx), embedding_dim=dimension, weight=torch.FloatTensor(weight)
         )
 
     @classmethod
@@ -215,9 +223,11 @@ class TextFieldEmbedder(torch.nn.Module):
         return ElmoTokenEmbedder(option_file, weight_file)
 
     @classmethod
-    def create_embedder(cls, args, vocab):
-        embedder_to_indexer_map = {}
-        embedders = {
+    def create_embedder(cls, args: SimpleArgumentParser, vocab: Vocabulary):
+        embedder_to_indexer_map: dict = {}
+        embedders: dict[
+            str, Embedding | TokenCharactersEmbedder | ElmoTokenEmbedder
+        ] = {
             "tokens": TextFieldEmbedder.tokens_embedder(vocab, args),
             "token_characters": TextFieldEmbedder.token_characters_embedder(
                 vocab, args

@@ -55,7 +55,10 @@ class Batch(Iterable):
 
     def as_tensor_dict(
         self, padding_lengths: dict[str, dict[str, int]] = {}
-    ) -> dict[str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]]:
+    ) -> dict[
+        str,
+        torch.Tensor | dict[str, torch.Tensor] | list[str] | tuple[torch.Tensor, ...],
+    ]:
         if padding_lengths is None:
             padding_lengths = defaultdict(dict)
         instance_padding_lengths: dict[str, dict[str, int]] = self.get_padding_lengths()
@@ -78,7 +81,11 @@ class Batch(Iterable):
 
         field_classes = self.instances[0].fields
         final_fields: dict[
-            str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]
+            str,
+            torch.Tensor
+            | dict[str, torch.Tensor]
+            | list[str]
+            | tuple[torch.Tensor, ...],
         ] = {}
         for field_name, field_tensor_list in field_tensors.items():
             final_fields[field_name] = field_classes[field_name].batch_tensors(
@@ -112,15 +119,33 @@ class _Iterator:
         self._cache: dict[
             int,
             list[
-                dict[str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]]
+                dict[
+                    str,
+                    torch.Tensor
+                    | dict[str, torch.Tensor]
+                    | list[str]
+                    | tuple[torch.Tensor, ...],
+                ]
             ],
         ] = defaultdict(list)
 
     def __call__(
         self, instances: list[Instance], shuffle: bool = True
     ) -> Generator[
-        dict[str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]],
-        dict[str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]],
+        dict[
+            str,
+            torch.Tensor
+            | dict[str, torch.Tensor]
+            | list[str]
+            | tuple[torch.Tensor, ...],
+        ],
+        dict[
+            str,
+            torch.Tensor
+            | dict[str, torch.Tensor]
+            | list[str]
+            | tuple[torch.Tensor, ...],
+        ],
         None,
     ]:
         """_summary_
@@ -135,7 +160,15 @@ class _Iterator:
         key: int = id(instances)
 
         if self._cache_instances and key in self._cache:
-            tensor_dicts: list = self._cache[key]
+            tensor_dicts: list[
+                dict[
+                    str,
+                    torch.Tensor
+                    | dict[str, torch.Tensor]
+                    | list[str]
+                    | tuple[torch.Tensor, ...],
+                ]
+            ] = self._cache[key]
             if shuffle:
                 random.shuffle(tensor_dicts)
             for tensor_dict in tensor_dicts:
@@ -149,7 +182,11 @@ class _Iterator:
                     batch.index_instances(self.vocab)
                 padding_lengths: dict[str, dict[str, int]] = batch.get_padding_lengths()
                 tensor_dict: dict[
-                    str, dict[str, torch.Tensor] | torch.Tensor | list[torch.Tensor]
+                    str,
+                    torch.Tensor
+                    | dict[str, torch.Tensor]
+                    | list[str]
+                    | tuple[torch.Tensor, ...],
                 ] = batch.as_tensor_dict(padding_lengths)
                 if add_to_cache:
                     self._cache[key].append(tensor_dict)

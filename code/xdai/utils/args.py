@@ -20,7 +20,7 @@ class SimpleArgumentParser(Tap):
     do_train: bool = False
     learning_rate: float = 5e-5
     train_batch_size_per_gpu: int = 8
-    num_train_epochs: int = 3
+    num_train_epochs: int = 20
     max_steps: int = 0  # If > 0, override num_train_epochs.
     warmup_steps: int = 0
     logging_steps: int = 50
@@ -54,8 +54,10 @@ class SimpleArgumentParser(Tap):
     # config.jsonから追加されるやつ
     # そういう意味では、標準入力のargsをずっと引き回すことに問題があるといわれればそれはとてもそう
     # 本当は標準入力から受け取るものとArgクラスと、こういうのを追加して一般に利用するArgクラスを別で持つべき
-    pretrained_word_embeddings: str = "/data/dai031/Corpora/GloVe/glove.6B.100d.txt"
-    word_embedding_size: int = 100
+    # pretrained_word_embeddings: str = "../../../../data/Corpus/GloVe/glove.6B.100d.txt"
+    # 取りあえず一旦相対パス
+    pretrained_word_embeddings: str = "../../../../data/Corpus/Fasttext/fasttext.vec"
+    word_embedding_size: int = 300
     char_embedding_size: int = 16
     action_embedding_size: int = 20
     lstm_cell_size: int = 200

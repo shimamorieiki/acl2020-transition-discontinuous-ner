@@ -92,18 +92,61 @@ def move_to_cpu(*tensors):
 Update date: 2019-April-26"""
 
 
-def move_to_gpu(obj, cuda_device=0):
-    if cuda_device < 0 or not has_tensor(obj):
-        return obj
-    if isinstance(obj, torch.Tensor):
-        return obj.cuda(cuda_device)
-    if isinstance(obj, dict):
-        return {k: move_to_gpu(v, cuda_device) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [move_to_gpu(v, cuda_device) for v in obj]
-    if isinstance(obj, tuple):
-        return tuple([move_to_gpu(v, cuda_device) for v in obj])
+def move_to_gpu(
+    obj: dict[
+        str,
+        torch.Tensor | dict[str, torch.Tensor] | list[str] | tuple[torch.Tensor, ...],
+    ],
+    cuda_device: int = 0,
+) -> dict[
+    str,
+    torch.Tensor | dict[str, torch.Tensor] | list[str] | tuple[torch.Tensor, ...],
+]:
+    """_summary_
+    dictの要素のうち、torch.Tensorのものはcudaに乗せる。それ以外はそのまま返す
+    Args:
+        obj (dict[ str, torch.Tensor  |  dict[str, torch.Tensor]  |  list[torch.Tensor]  |  tuple[torch.Tensor, ...], ]): _description_
+        cuda_device (int, optional): _description_. Defaults to 0.
+
+    Returns:
+        dict[ str, torch.Tensor | dict[str, torch.Tensor] | list[torch.Tensor] | tuple[torch.Tensor, ...], ]: _description_
+    """
+    # print(type(obj))
+    for k, v in obj.items():
+        if isinstance(v, torch.Tensor):
+            obj[k] = move_tensor_to_gpu(tensor=v, cuda_device=cuda_device)
+
+        elif isinstance(v, list):
+            # list[str]はcudaに乗せるものは存在しない
+            pass
+
+        elif isinstance(v, dict):
+            obj[k] = {
+                ik: move_tensor_to_gpu(tensor=tensor, cuda_device=cuda_device)
+                for ik, tensor in v.items()
+            }
+        elif isinstance(v, tuple):
+            # 今回の引数にはtupleは関係なさそうなので何もしない
+            pass
     return obj
+
+
+def move_tensor_to_gpu(
+    tensor: torch.Tensor,
+    cuda_device: int = 0,
+):
+    """_summary_
+    1つのtorchをgpuに乗せる
+    Args:
+        tensor (torch.Tensor): _description_
+        cuda_device (int, optional): _description_. Defaults to 0.
+
+    Returns:
+        _type_: _description_
+    """
+    # print(type(tensor))
+    # print(tensor)
+    return tensor.cuda(cuda_device)
 
 
 """Update date: 2019-Nov-3"""

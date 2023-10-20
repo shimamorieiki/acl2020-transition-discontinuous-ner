@@ -7,6 +7,7 @@ from xdai.utils.seq2seq import LstmEncoder
 from xdai.utils.token_embedder import Embedding, TextFieldEmbedder
 from xdai.utils.vocab import Vocabulary
 from xdai.utils.args import SimpleArgumentParser
+from xdai.ner.mention import Mention
 
 
 # 本当はここら辺のクラスも全部個別のファイルに分けたい気持ちがある
@@ -450,14 +451,14 @@ class TransitionModel(torch.nn.Module):
         self.parser = Parser()
 
         self._metric = {
-            "correct_actions": 0,
-            "total_actions": 0,
-            "correct_mentions": 0,
-            "total_gold_mentions": 0,
-            "total_pred_mentions": 0,
-            "correct_disc_mentions": 0,
-            "total_gold_disc_mentions": 0,
-            "total_pred_disc_mentions": 0,
+            "correct_actions": 0.0,
+            "total_actions": 0.0,
+            "correct_mentions": 0.0,
+            "total_gold_mentions": 0.0,
+            "total_pred_mentions": 0.0,
+            "correct_disc_mentions": 0.0,
+            "total_gold_disc_mentions": 0.0,
+            "total_pred_disc_mentions": 0.0,
         }
 
     def _get_possible_actions(
@@ -476,19 +477,37 @@ class TransitionModel(torch.nn.Module):
         valid_actions: list[int] = []
 
         if len(buffer) > 0:
-            valid_actions.append(self.action2idx["SHIFT"])
-            valid_actions.append(self.action2idx["OUT"])
+            if "SHIFT" in self.action2idx:
+                valid_actions.append(self.action2idx["SHIFT"])
+            if "OUT" in self.action2idx:
+                valid_actions.append(self.action2idx["OUT"])
         if len(stack) >= 1:
-            valid_actions.append(self.action2idx["COMPLETE"])
-            valid_actions.append(self.action2idx["COMPLETE-RIGHT"])
+            if "COMPLETE" in self.action2idx:
+                valid_actions.append(self.action2idx["COMPLETE"])
+            if "COMPLETE-RIGHT" in self.action2idx:
+                valid_actions.append(self.action2idx["COMPLETE-RIGHT"])
         if len(stack) >= 2:
-            valid_actions.append(self.action2idx["REDUCE"])
-            valid_actions.append(self.action2idx["REDUCE-LR"])
+            if "REDUCE" in self.action2idx:
+                valid_actions.append(self.action2idx["REDUCE"])
+            if "REDUCE-LR" in self.action2idx:
+                valid_actions.append(self.action2idx["REDUCE-LR"])
 
         valid_actions = sorted(valid_actions)
         return valid_actions
 
     def get_metrics(self, reset: bool = False) -> dict[str, float]:
+        # self._metric: {
+        #     "correct_actions": 10694.0,
+        #     "total_actions": 25185.0,
+        #     "correct_mentions": 0.0,
+        #     "total_gold_mentions": 0.0,
+        #     "total_pred_mentions": 0.0,
+        #     "correct_disc_mentions": 0.0,
+        #     "total_gold_disc_mentions": 0.0,
+        #     "total_pred_disc_mentions": 0.0,
+        # }
+        print("self._metric: ", self._metric)
+
         _metrics: dict[str, float] = {}
         _metrics["accuracy"] = (
             self._metric["correct_actions"] / self._metric["total_actions"]
@@ -642,14 +661,23 @@ class TransitionModel(torch.nn.Module):
         Returns:
             _type_: _description_
         """
+        # print("tokens: ", tokens)
+        # print("actions: ", actions)
+        # print("annotations: ", annotations)
         # annotationsの値は複数(今回は8つ)の要素をまとめたbatchをまとめて表示している
         # ['0,3 bef1|4,10 aft1', '7,16 bef1|18,26 aft1', '', '', '15,18 bef1|20,31 aft1|33,42 aft1', '', '16,19 bef1|20,23 aft1', '']
         embedded_tokens: torch.Tensor = self.dropout(self.text_filed_embedder(tokens))
+        # print("embedded_tokens: ", embedded_tokens)
         mask = TextField.get_text_field_mask(tokens)
+        # print("mask: ", mask)
         sequence_lengths = mask.sum(dim=1).detach().cpu().numpy()
+        # print("sequence_length: ", sequence_lengths)
         encoded_tokens: torch.Tensor = self.dropout(self.encoder(embedded_tokens, mask))
+        # print("encode_tokens: ", encoded_tokens)
 
+        batch_size: int
         batch_size, _, _ = encoded_tokens.size()
+        # print("batch_size: ", batch_size)
 
         total_loss: int | torch.Tensor = 0
         preds: list[str] = []
@@ -672,40 +700,58 @@ class TransitionModel(torch.nn.Module):
             previous_action_name: str = ""
 
             if self.training:
+                # print("今はトレーニング中です")
                 for j in range(len(actions[i])):
+                    # この操作を通してactions中の要素gold_actionsはint型の値になる
                     gold_action: torch.Tensor | int = actions[i][j]
+                    # print("gold_action1: ", gold_action)
                     if type(gold_action) != int:
                         gold_action = gold_action.cpu().data.numpy().item()
+                        # print("gold_action2: ", gold_action)
                     if gold_action == 0:
+                        # print("gold_action3: ", gold_action)
                         break
 
                     valid_actions: list[int] | dict[
                         int, int
                     ] = self._get_possible_actions(stack, buffer, previous_action_name)
+                    # print("valid_actions: ", valid_actions)
                     assert gold_action in valid_actions
                     gold_actions.append(gold_action)
                     gold_action_name: str = self.idx2action[gold_action]
+                    # print("gold_action_name: ", gold_action_name)
                     previous_action_name = gold_action_name
 
+                    # valid_actionsが1つしかなければそれを予想するものとする？
+                    # pred_actionに代入するとはつまりどういうことなのかがよくわかっていない
                     if len(valid_actions) == 1:
                         pred_action: int = valid_actions[0]
+                        # print("(１つから選択した場合の)pred_action: ", pred_action)
                         assert pred_action == gold_action
                     else:
+                        # 有効な選択肢が複数ある時はその中からどれを決定するかを選ぶ
                         features: torch.Tensor = self._build_state_representation(
                             buffer, stack, action_history
                         )
+                        # print("features1: ", features)
                         features = F.relu(self.hidden2feature(self.dropout(features)))
+                        # print("features2: ", features)
                         logits: torch.Tensor = self.feature2action(features)[
                             torch.LongTensor(valid_actions).cuda()
                         ]
+                        # print("logits: ", logits)
                         log_probs: torch.Tensor = torch.nn.functional.log_softmax(
                             logits, 0
                         )
+                        # print("log_probs: ", log_probs)
                         pred_action: int = valid_actions[
                             torch.max(logits.cpu(), 0)[1].data.numpy().item()
                         ]
+                        # print("(複数から選択した場合の)pred_action: ", pred_action)
+                        # print("この時の実際のgold_action: ", gold_action)
 
                         valid_actions = {a: i for i, a in enumerate(valid_actions)}
+                        # print("valid_actions: ", valid_actions)
                         assert len(log_probs) == len(valid_actions)
                         total_loss += log_probs[valid_actions[gold_action]]
 
@@ -726,11 +772,14 @@ class TransitionModel(torch.nn.Module):
                             self._metric["correct_actions"] += 1
                         self._metric["total_actions"] += 1
             else:
+                # print("今はトレーニング中ではありません")
                 while True:
                     valid_actions = self._get_possible_actions(
                         stack, buffer, previous_action_name
                     )
-                    if len(valid_actions) < 1:
+                    # print("-------------------------------")
+                    # print("valid_actions: ", valid_actions)
+                    if len(valid_actions) == 0:
                         break
                     elif len(valid_actions) == 1:
                         pred_action = valid_actions[0]
@@ -746,6 +795,8 @@ class TransitionModel(torch.nn.Module):
                         pred_action = valid_actions[
                             torch.max(logits.cpu(), 0)[1].data.numpy().item()
                         ]
+                    #     print("pred_action: ", pred_action)
+                    # print("-------------------------------")
 
                     pred_actions.append(pred_action)
                     pred_action_name = self.idx2action[pred_action]
@@ -758,30 +809,50 @@ class TransitionModel(torch.nn.Module):
                             )
                         ).squeeze(0)
                     )
-
                     stack, buffer = self._apply_action(stack, buffer, pred_action_name)
 
-                gold_mentions = (
+                # print(f"annotations[{i}]: {annotations[i]}")
+                gold_mentions: list[str] = (
                     annotations[i].split("|") if len(annotations[i].strip()) > 0 else []
                 )
+                # print("gold_mentions: ", gold_mentions)
+
+                # TODO なんですかねこれは？
+                # 0,1,2 bef1 のようにインデックスが3つ以上ある場合は1で
+                # 0,1 bef1 のようにインデックスが2つ以下の場合は0らしい。
+                # じゃあこれが何なのかと聞かれると何もわからない
                 discontinuous = [
                     1 if len(m.split(" ")[0].split(",")) > 2 else 0
                     for m in gold_mentions
                 ]
-                discontinuous = sum(discontinuous) > 0
-                pred_actions = [self.idx2action[p] for p in pred_actions]
-                pred_mentions = self.parser.parse(pred_actions)
-                pred_mentions = [str(p) for p in pred_mentions]
-                for p in pred_mentions:
+                # print("discontinuous: ", discontinuous)
+
+                # 1つ以上discontinuousのものが存在するかどうか
+                # (この場合の「discontinuousかどうか」って何？)
+                is_discontinuous: bool = sum(discontinuous) > 0
+
+                pred_action_names: list[str] = [
+                    self.idx2action[p] for p in pred_actions
+                ]
+                # print("pred_action_names: ", pred_action_names)
+
+                pred_mentions: list[Mention] = self.parser.parse(pred_action_names)
+                # print("pred_mentions: ", pred_mentions)
+
+                pred_mention_names: list[str] = [str(p) for p in pred_mentions]
+                # print("pred_mention_names: ", pred_mention_names)
+                for p in pred_mention_names:
                     if p in gold_mentions:
                         self._metric["correct_mentions"] += 1
-                        if discontinuous:
+                        if is_discontinuous:
                             self._metric["correct_disc_mentions"] += 1
                 self._metric["total_gold_mentions"] += len(gold_mentions)
                 self._metric["total_pred_mentions"] += len(pred_mentions)
                 if discontinuous:
                     self._metric["total_gold_disc_mentions"] += len(gold_mentions)
                     self._metric["total_pred_disc_mentions"] += len(pred_mentions)
-                preds.append("|".join(pred_mentions))
+                preds.append("|".join(pred_mention_names))
 
+        #     print("pred_actions: ", pred_actions)
+        # print("preds: ", preds)
         return {"loss": -1.0 * total_loss, "preds": preds}

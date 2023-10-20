@@ -46,7 +46,7 @@ class DatasetReaderYS:
             _type_: _description_
         """
 
-        count = 0
+        # count = 0
         instances: list[Instance] = []
 
         with open(filepath, mode="r", encoding="utf-8") as f:
@@ -77,9 +77,9 @@ class DatasetReaderYS:
                         actions=actions,
                     )
                 )
-                count += 1
-                if count >= 400:
-                    break
+                # count += 1
+                # if count >= 10:
+                #     break
 
         return instances
 
