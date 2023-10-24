@@ -46,7 +46,7 @@ class DatasetReaderYS:
             _type_: _description_
         """
 
-        # count = 0
+        count = 0
         instances: list[Instance] = []
 
         with open(filepath, mode="r", encoding="utf-8") as f:
@@ -60,6 +60,9 @@ class DatasetReaderYS:
                 # 元の文に復元したもの
                 sentence = "".join(wakati)
 
+                # 本当は1つの要素が複数spanに分かれているものも対応したいが
+                # 現在のアノテーションではそれは不可能なので
+                # spanに分かれているものは扱わない
                 annotations: str = "|".join(
                     [f"{label[0]},{label[1]} {label[2]}" for label in labels]
                 )
@@ -77,9 +80,9 @@ class DatasetReaderYS:
                         actions=actions,
                     )
                 )
-                # count += 1
-                # if count >= 10:
-                #     break
+                count += 1
+                if count >= 100:
+                    break
 
         return instances
 

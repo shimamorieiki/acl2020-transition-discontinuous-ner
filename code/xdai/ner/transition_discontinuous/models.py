@@ -450,7 +450,7 @@ class TransitionModel(torch.nn.Module):
 
         self.parser = Parser()
 
-        self._metric = {
+        self._metric: dict[str, float] = {
             "correct_actions": 0.0,
             "total_actions": 0.0,
             "correct_mentions": 0.0,
@@ -459,6 +459,18 @@ class TransitionModel(torch.nn.Module):
             "correct_disc_mentions": 0.0,
             "total_gold_disc_mentions": 0.0,
             "total_pred_disc_mentions": 0.0,
+            "correct_span_mentions": 0.0,  # ある1要素のタグの一致数
+            "correct_pair_mentions": 0.0,  # 2要素からなる1組の並列のタグの一致数
+            "total_span_pred_mentions": 0.0,  # 予測した[1要素のタグ]の一致数の合計
+            "total_pair_pred_mentions": 0.0,  # 予測した[2要素からなる1組の並列のタグ]の一致数の合計
+            # 例えば「お金と健康が重要」という文は["お金","健康"]という要素の組からなっている
+            # ["金","健康"]という組を検出した場合
+            # correct_span_mentions は "健康" が取れているので 1
+            # correct_pair_mentions は ["お金","健康"] が取れていないので 0 とする
+            # total_span_pred_mentions は ["金","健康"] の要素数なので 2
+            # total_pair_pred_mentions は ["金","健康"] からなる1組を取得したので 1
+            "total_span_gold_mentions": 0.0,  # 正解の[1要素のタグの]一致数の合計
+            "total_pair_gold_mentions": 0.0,  # 正解の[2要素からなる1組の並列のタグ]の一致数の合計
         }
 
     def _get_possible_actions(
@@ -496,42 +508,77 @@ class TransitionModel(torch.nn.Module):
         return valid_actions
 
     def get_metrics(self, reset: bool = False) -> dict[str, float]:
-        # self._metric: {
-        #     "correct_actions": 10694.0,
-        #     "total_actions": 25185.0,
+        # {
+        #     "correct_actions": 0.0,
+        #     "total_actions": 0.0,
         #     "correct_mentions": 0.0,
         #     "total_gold_mentions": 0.0,
         #     "total_pred_mentions": 0.0,
         #     "correct_disc_mentions": 0.0,
         #     "total_gold_disc_mentions": 0.0,
         #     "total_pred_disc_mentions": 0.0,
+        #     "total_span_pred_mentions": 2.0,
+        #     "total_pair_pred_mentions": 1.0,
+        #     "total_span_gold_mentions": 2.0,
+        #     "total_pair_gold_mentions": 1.0,
         # }
-        print("self._metric: ", self._metric)
+        # print("self._metric: ", self._metric)
 
         _metrics: dict[str, float] = {}
+        
+        _metrics["total_pair_pred_mentions"] = self._metric["total_pair_pred_mentions"]
+        _metrics["correct_actions"] = self._metric["correct_actions"]
+        _metrics["total_actions"] = self._metric["total_actions"]
+        
+        # actionのaccuracy
         _metrics["accuracy"] = (
             self._metric["correct_actions"] / self._metric["total_actions"]
             if self._metric["total_actions"] > 0
             else 0.0
         )
-        _metrics["precision-overall"] = (
-            self._metric["correct_mentions"] / self._metric["total_pred_mentions"]
-            if self._metric["total_pred_mentions"] > 0
+
+        # # mentionの1要素単位でのprecision(適合率) // システムが正解としたもののうち本当の正解の割合
+        # _metrics["span-precision-overall"] = (
+        #     self._metric["correct_span_mentions"]
+        #     / self._metric["total_span_pred_mentions"]
+        #     if self._metric["total_span_pred_mentions"] > 0
+        #     else 0.0
+        # )
+
+        # mentionの並列組単位でのprecision(適合率) // システムが正解としてとってきた分の本当の正解
+        _metrics["pair-precision-overall"] = (
+            self._metric["correct_pair_mentions"]
+            / self._metric["total_pair_pred_mentions"]
+            if self._metric["total_pair_pred_mentions"] > 0
             else 0.0
         )
-        _metrics["recall-overall"] = (
-            self._metric["correct_mentions"] / self._metric["total_gold_mentions"]
-            if self._metric["total_gold_mentions"] > 0
+
+        # 最終的には消す
+        _metrics["precision-overall"] = 0
+
+        # mentionの並列組単位でのprecision(適合率) // システムが正解としてとってきた分の本当の正解
+        _metrics["pair-recall-overall"] = (
+            self._metric["correct_pair_mentions"]
+            / self._metric["total_pair_gold_mentions"]
+            if self._metric["total_pair_gold_mentions"] > 0
             else 0.0
         )
-        _metrics["f1-overall"] = (
+
+        # 最終的には消す
+        _metrics["recall-overall"] = 0
+
+        # pair単位でのf1値
+        _metrics["pair-f1-overall"] = (
             2
-            * _metrics["precision-overall"]
-            * _metrics["recall-overall"]
-            / (_metrics["precision-overall"] + _metrics["recall-overall"])
-            if _metrics["precision-overall"] + _metrics["recall-overall"] > 0
+            * _metrics["pair-precision-overall"]
+            * _metrics["pair-recall-overall"]
+            / (_metrics["pair-precision-overall"] + _metrics["pair-recall-overall"])
+            if _metrics["pair-precision-overall"] + _metrics["pair-recall-overall"] > 0
             else 0.0
         )
+
+        # 最終的には消す
+        _metrics["f1-overall"] = 0
 
         _metrics["discontinuous-precision-overall"] = (
             self._metric["correct_disc_mentions"]
@@ -569,6 +616,12 @@ class TransitionModel(torch.nn.Module):
                 "correct_disc_mentions": 0.0,
                 "total_gold_disc_mentions": 0.0,
                 "total_pred_disc_mentions": 0.0,
+                "correct_span_mentions": 0.0,  # ある1要素のタグの一致数
+                "correct_pair_mentions": 0.0,  # 2要素からなる1組の並列のタグの一致数
+                "total_span_pred_mentions": 0.0,  # 予測したある1要素のタグの一致数の合計
+                "total_pair_pred_mentions": 0.0,  # 予測した2要素からなる1組の並列のタグの一致数の合計
+                "total_span_gold_mentions": 0.0,  # 正解のある1要素のタグの一致数の合計
+                "total_pair_gold_mentions": 0.0,  # 正解の2要素からなる1組の並列のタグの一致数の合計
             }
 
         return _metrics
@@ -772,6 +825,9 @@ class TransitionModel(torch.nn.Module):
                             self._metric["correct_actions"] += 1
                         self._metric["total_actions"] += 1
             else:
+                # 現状だとtraining以外では(つまりここ以降では)accuracyの計算をしていない
+                # 同様に、trainingではf1値の計算をしていない
+                # TODO これらの値を計算すること自体には価値があると思うのでどこかで計算するように変更する
                 # print("今はトレーニング中ではありません")
                 while True:
                     valid_actions = self._get_possible_actions(
@@ -811,48 +867,217 @@ class TransitionModel(torch.nn.Module):
                     )
                     stack, buffer = self._apply_action(stack, buffer, pred_action_name)
 
-                # print(f"annotations[{i}]: {annotations[i]}")
-                gold_mentions: list[str] = (
-                    annotations[i].split("|") if len(annotations[i].strip()) > 0 else []
-                )
+                gold_mentions: list[
+                    tuple[list[tuple[int, int]], list[tuple[int, int]]]
+                ] = self.create_gold_mentions(annotation=annotations[i])
+                # print("gold_mentions: ", gold_mentions)
+                # gold_mentions: list[
+                #     tuple[list[tuple[int, int]], list[tuple[int, int]]]
+                # ] = [([(0, 1)], [(3, 6)]), ([(0, 2), (6, 8)], [(10, 12)])]
                 # print("gold_mentions: ", gold_mentions)
 
-                # TODO なんですかねこれは？
-                # 0,1,2 bef1 のようにインデックスが3つ以上ある場合は1で
-                # 0,1 bef1 のようにインデックスが2つ以下の場合は0らしい。
-                # じゃあこれが何なのかと聞かれると何もわからない
-                discontinuous = [
-                    1 if len(m.split(" ")[0].split(",")) > 2 else 0
-                    for m in gold_mentions
-                ]
-                # print("discontinuous: ", discontinuous)
-
-                # 1つ以上discontinuousのものが存在するかどうか
-                # (この場合の「discontinuousかどうか」って何？)
-                is_discontinuous: bool = sum(discontinuous) > 0
+                # discontinuousとなっている要素が1つ以上存在するかどうか
+                # この文脈における「discontinuousとなっている要素」とは
+                # 1つの要素が2つ以上の離れたスパンから成立しているもの
+                # 例えば 「私の小学校の(中学は別のところに行ったんですが)友達と会社の同僚」
+                # という文だと、「小学校の友達」という要素は連続しておらず「小学校の」と「友達」という
+                # 2つのスパンから成立している。こういうものを指している
+                is_discontinuous = any([len(m) > 2 for m in gold_mentions])
 
                 pred_action_names: list[str] = [
                     self.idx2action[p] for p in pred_actions
                 ]
                 # print("pred_action_names: ", pred_action_names)
+                # 何がどうなっているかを検証するために一旦ダミーで完全な正解を用意してみる
+                # pred_action_names = [
+                #     "SHIFT",
+                #     "SHIFT",
+                #     "REDUCE",
+                #     "OUT",
+                #     "SHIFT",
+                #     "SHIFT",
+                #     "REDUCE",
+                #     "SHIFT",
+                #     "REDUCE",
+                #     "SHIFT",
+                #     "REDUCE",
+                #     "COMPLETE",
+                #     "OUT",
+                #     "OUT",
+                #     "OUT",
+                #     "OUT",
+                #     "OUT",
+                #     "OUT",
+                #     "OUT",
+                #     "OUT",
+                #     "OUT",
+                #     "OUT",
+                #     "OUT",
+                # ]
+                # 戻り値をlist[tuple[Mention,Mention]]とする
+                # 今回はMentionのlabelは不要なのですべて空文字とする
+                pred_mentions: list[tuple[Mention, Mention]] = self.parser.parse(
+                    pred_action_names
+                )
 
-                pred_mentions: list[Mention] = self.parser.parse(pred_action_names)
                 # print("pred_mentions: ", pred_mentions)
-
-                pred_mention_names: list[str] = [str(p) for p in pred_mentions]
+                # for bef_mention, aft_mention in pred_mentions:
+                #     print(f"spans:{bef_mention.spans[0]},label:'{bef_mention.label}'")
+                #     print(f"spans:{aft_mention.spans[0]},label:'{bef_mention.label}'")
+                # 上記の方針でタグの一致率を判定するので、文字列ではなく、spanのままで扱う
+                # pred_mention_names: list[str] = [str(p) for p in pred_mentions]
                 # print("pred_mention_names: ", pred_mention_names)
-                for p in pred_mention_names:
-                    if p in gold_mentions:
-                        self._metric["correct_mentions"] += 1
-                        if is_discontinuous:
-                            self._metric["correct_disc_mentions"] += 1
-                self._metric["total_gold_mentions"] += len(gold_mentions)
-                self._metric["total_pred_mentions"] += len(pred_mentions)
-                if discontinuous:
+                # ここで返されるメンション名が意図したものではないという問題がある
+                # TODO 1つの要素がとびとびになるパターンをいつか試したい
+
+                # self._metric["span_pred_mentions"]
+                # self._metric["pair_pred_mentions"]
+                # self._metric["total_span_pred_mentions"]
+                # self._metric["total_pair_pred_mentions"]
+                # self._metric["total_span_gold_mentions"]
+                # self._metric["total_pair_gold_mentions"]
+                # print(f"gold_mentions: {gold_mentions}")
+                # 1つのspanが一致しているかと
+                # 組全体が完全に一致しているかを見る必要がある
+                # まずpair単位で等しいかを確認する
+                for pred_spans_bef, pred_spans_aft in pred_mentions:
+                    for gold_spans_bef, gold_spans_aft in gold_mentions:
+                        pred_spans_bef_ids: list[int] = []
+                        for span in pred_spans_bef.spans:
+                            pred_spans_bef_ids.append(span.start)
+                            pred_spans_bef_ids.append(span.end)
+                        pred_spans_bef_ids = sorted(list(set(pred_spans_bef_ids)))
+                        gold_spans_bef_ids: list[int] = sorted(
+                            [item for gm in gold_spans_bef for item in gm]
+                        )
+
+                        pred_spans_aft_ids: list[int] = []
+                        for span in pred_spans_aft.spans:
+                            pred_spans_aft_ids.append(span.start)
+                            pred_spans_aft_ids.append(span.end)
+                        pred_spans_aft_ids = sorted(list(set(pred_spans_aft_ids)))
+                        gold_spans_aft_ids: list[int] = sorted(
+                            [item for gm in gold_spans_aft for item in gm]
+                        )
+
+                        # どちらもすべてのインデックスが一致しているのなら
+                        # 並列組単位での正解の個数を1つ増やす
+                        if (pred_spans_bef_ids == gold_spans_bef_ids) and (
+                            pred_spans_aft_ids == gold_spans_aft_ids
+                        ):
+                            self._metric["correct_pair_mentions"] += 1
+
+                # TODO 次にspansの重複をなくしたうえで要素単位で等しいかを確認する(後回しでよい)
+                # TODO 一応span単位で見るということもできるとは思うが、本当にやるのか？(後回しでよい)
+
+                # 予想した並列組の個数の合計
+                self._metric["total_pair_pred_mentions"] += len(pred_mentions)
+
+                # 予想した並列組を構成する要素の合計(=相異なるMentionオブジェクトの合計)
+                unique_pred_mentions: set[str] = set()
+                for pm1, pm2 in pred_mentions:
+                    unique_pred_mentions.add(str(pm1))
+                    unique_pred_mentions.add(str(pm2))
+                # print(f"unique_pred_mentions: {unique_pred_mentions}")
+                self._metric["total_span_pred_mentions"] += len(unique_pred_mentions)
+
+                # 正解の並列組の個数の合計
+                self._metric["total_pair_gold_mentions"] += len(gold_mentions)
+
+                # 正解の並列組を構成する要素の合計(=相異なるMentionオブジェクトの合計)
+                unique_gold_mentions: set[str] = set()
+                # 1つのpairには[[(0,1),(2,3)],[(4,6)]] のように1要素が複数spanからなるものも存在しうる
+                for gold_mention_pair in gold_mentions:
+                    for gold_mention_span in gold_mention_pair:
+                        # list[tuple[int,int]] を list[int] のように flat にする
+                        # ある要素に複数のspanがある場合にそれらのidをソートして1つの list[str] にする
+                        # 本当はintでsortすべきだろうけど
+                        # 今回はuniqueかどうかを比較するだけなのでstrに変換してからsortする
+                        ids: list[str] = sorted(
+                            [str(item) for gm in gold_mention_span for item in gm]
+                        )
+                        unique_gold_mentions.add(":".join(ids))
+
+                # print(f"unique_gold_mentions: {unique_gold_mentions}")
+                self._metric["total_span_gold_mentions"] += len(unique_gold_mentions)
+
+                if is_discontinuous:
+                    # TODO discontinuousの場合の評価は取りあえず一旦無視
+                    # 本来はdiscontinuousのNERとdiscontinuousでないNERが含まれていたから分けていたが、
+                    # 今回は、並列の要素という点では大体全部discontinuousなので、
+                    # その区分に意味があるかと聞かれたらあんまりない気がする。
+                    # 一応、各要素のスパンがdiscontinuousかどうかという観点はあるが、些末な問題な気がする
+                    # is_discontinuous は 各要素のスパンがdiscontinuousかどうか で使うこととする(後回しでよい)
                     self._metric["total_gold_disc_mentions"] += len(gold_mentions)
                     self._metric["total_pred_disc_mentions"] += len(pred_mentions)
-                preds.append("|".join(pred_mention_names))
+
+                # 今ここでpredsを返している気持ちもよくわからない。
+                # = ログに出すだけ。
+                # preds.append("|".join(pred_mention_names))
 
         #     print("pred_actions: ", pred_actions)
         # print("preds: ", preds)
+        # print(self._metric)
         return {"loss": -1.0 * total_loss, "preds": preds}
+
+    def create_gold_mentions(
+        self, annotation: str
+    ) -> list[tuple[list[tuple[int, int]], list[tuple[int, int]]]]:
+        """_summary_
+            gold_mentions:  ['0,2 bef1', '3,7 aft1']
+            gold_mentions から自分が欲しい形式の mentions を頑張って作る必要がある
+            今回ほしい mentions は bef_n と aft_n がlist[tuple[span]]の形式で存在しているもの
+            つまり、上の例では [[[0,1]],[[3,6]]]
+            かっこが冗長な気がするが、discontinuousのようなものを考えるとこれが正しい
+            1つの並列組[[(0,1),(3,4)],[(6,7)]] のようなものも存在しうる
+            これ、別に[[(0,1,3,4)],[(6,7)]]で良くない？
+            ま～あでも区間ごとで別に持っている方が理解はしやすいよな
+            やっぱり tuple[int,int] で始点と終点が明示されてる方が分かりやすいよな
+            つまり型としては list[list[tuple[int,int]]]
+        Args:
+            annotations (list[str]): _description_
+
+        Returns:
+            list[tuple[list[tuple[int, int]], list[tuple[int, int]]]]: _description_
+        """
+        # list["<開始>,<終了> <ラベル>"]
+        label_and_id_strs: list[str] = (
+            annotation.split("|") if len(annotation.strip()) > 0 else []
+        )
+        label_and_ids: list[tuple[int, int, str]] = []
+
+        for label_and_id_str in label_and_id_strs:
+            ids, label = label_and_id_str.split(" ")
+            start_id, end_id = map(int, ids.split(","))
+            label_and_ids.append((start_id, end_id, label))
+        label_and_ids = sorted(label_and_ids)
+
+        span_matches_dict: dict[str, tuple[int, int]] = {}
+        gold_mentions: list[tuple[list[tuple[int, int]], list[tuple[int, int]]]] = []
+
+        for start_id, end_id, label in label_and_ids:
+            if "bef" in label:
+                span_matches_dict.setdefault(label, (start_id, end_id))
+
+            if "aft" in label:
+                # 対応するラベルの名前
+                matched_label_name = label.replace("aft", "bef")
+                bef_span: tuple[int, int] | None = span_matches_dict.get(
+                    matched_label_name, None
+                )
+                if bef_span is None:
+                    raise ValueError("対応するbefのラベルがない")
+                # bef_n_1, bef_n_2 のようにspanが分かれるとまた話がややこしくなるが、
+                # 現状はそうなっていないので([(0,1),(3,4)],[(6,7)])のようなものを考える必要はない
+                # つまり1つの並列組の表現として ([(0,1)],[(3,6)]) でよい
+
+                # また、doccanoのアノテーションとpred_mentionのMentionでは
+                # end_indexに相当する箇所が1つずれているのでその分も修正する必要がある
+                # つまりannotationを作る時点でそこら辺の修正も併せてやりたい
+                gold_mention: tuple[list[tuple[int, int]], list[tuple[int, int]]] = (
+                    [(bef_span[0], bef_span[1] - 1)],
+                    [(start_id, end_id - 1)],
+                )
+                gold_mentions.append(gold_mention)
+
+        return gold_mentions

@@ -102,8 +102,6 @@ def _batch_loss(
         torch.Tensor | dict[str, torch.Tensor] | list[str] | tuple[torch.Tensor, ...],
     ],
 ) -> torch.Tensor:
-    # print(type(batch))
-    # print(batch)
     batch = move_to_gpu(batch, cuda_device=args.cuda_device[0])
     output_dict: dict[str, Any] = model(**batch)
     # print("output_dict: ", output_dict)
@@ -124,8 +122,11 @@ def _get_val_loss(
     data: list[Instance],
 ) -> float:
     # print("これがdataの中身")
-    # print([datum for datum in data])
-    # print(data)
+    # for datum in data:
+        # print(datum.fields)
+        # print(datum.fields["actions"].actions)
+        # print(datum.fields["annotations"])
+        # print(datum.fields["tokens"].tokens)
     model.eval()
     generator = iterator(data, shuffle=False)
     total_loss: float = 0.0
@@ -134,11 +135,14 @@ def _get_val_loss(
         # print(f"batch({type(batch)}): {batch}")
         batch_counter += 1
         _loss = _batch_loss(args, model, batch)
+        # print("_loss: ", _loss)
         if isinstance(_loss, float):
             total_loss += _loss
         else:
             total_loss += _loss.item()
     loss = float(total_loss / batch_counter) if batch_counter > 0 else 0.0
+    # print("loss: ", loss)
+    # exit()
     return loss
 
 
@@ -160,6 +164,14 @@ Update date: 2019-April-20"""
 def _output_metrics_to_console(
     train_metrics: dict[str, float], dev_metrics: dict[str, float] = {}
 ) -> None:
+    """_summary_
+    trainの結果のメトリクスとdevの結果のメトリクスをログに出力する
+    Args:
+        train_metrics (dict[str, float]): _description_
+        dev_metrics (dict[str, float], optional): _description_. Defaults to {}.
+    """
+
+    # metric名のリスト
     metric_names: list[str] = list(
         set(list(train_metrics.keys()) + list(dev_metrics.keys()))
     )
@@ -240,8 +252,7 @@ def _train_epoch(
                 % (batch_counter, num_batches, metrics["loss"])
             )
 
-    metrics = model.get_metrics(reset=False)
-    print("resetしないで取得したmetrics: ", metrics)
+    metrics = model.get_metrics(reset=True)
     metrics["loss"] = float(total_loss / batch_counter) if batch_counter > 0 else 0.0
     return metrics
 
@@ -296,11 +307,13 @@ def train_op(
     for epoch in range(0, max_epoches):
         logger.info("Epoch %d/%d" % (epoch + 1, max_epoches))
         train_metrics = _train_epoch(args, model, optimizer, train_iterator, train_data)
-        print(f"train_opの中のtrain_metrics: {train_metrics}")
+        # print(f"train_opの中のtrain_metrics: {train_metrics}")
         with torch.no_grad():
             val_loss: float = _get_val_loss(args, model, dev_iterator, dev_data)
+            # print("val_loss: ", val_loss)
             val_metrics: dict[str, float] = model.get_metrics(reset=True)
             val_metrics["loss"] = val_loss
+            # print("val_metrics: ", val_metrics)
             this_epoch_val_metric: float = val_metrics[validation_metric]
             is_best: bool = _is_best_model_so_far(
                 this_epoch_val_metric, validation_metric_per_epoch
