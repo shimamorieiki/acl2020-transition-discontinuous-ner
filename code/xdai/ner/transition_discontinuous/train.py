@@ -103,13 +103,17 @@ def get_datasets_ys() -> dict[str, list[Instance]]:
     data_reader_ys = DatasetReaderYS("")
     instances = data_reader_ys.read(filepath=data_filepath)
 
-    # データ全体をtrain:dev:test = 6:1:3で分ける
-    num_dev_instances = int(len(instances) / 10)
-    num_test_instances = int(3 * len(instances) / 10)
-    dev_data = instances[0:num_dev_instances]
-    test_data = instances[num_dev_instances : num_dev_instances + num_test_instances]
-    train_data = instances[num_dev_instances + num_test_instances :]
-
+    # # データ全体をtrain:dev:test = 6:1:3で分ける
+    # num_dev_instances = int(len(instances) / 10)
+    # num_test_instances = int(3 * len(instances) / 10)
+    # dev_data = instances[0:num_dev_instances]
+    # test_data = instances[num_dev_instances : num_dev_instances + num_test_instances]
+    # train_data = instances[num_dev_instances + num_test_instances :]
+    
+    # dev_dataがちゃんと更新されうるかを確認するために全部同じデータセットを使ってみる
+    dev_data = instances
+    test_data = instances
+    train_data = instances
     logger.info("Load %d instances from train set." % (len(train_data)))
     logger.info("Load %d instances from dev set." % (len(dev_data)))
     logger.info("Load %d instances from test set." % (len(test_data)))

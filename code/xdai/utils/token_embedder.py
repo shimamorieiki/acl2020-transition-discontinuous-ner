@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 import torch
-from xdai.elmo.models import Elmo
+# from xdai.elmo.models import Elmo
 from xdai.utils.nn import TimeDistributed
 from xdai.utils.seq2vec import CnnEncoder
 from xdai.utils.args import SimpleArgumentParser
@@ -69,46 +69,46 @@ class TokenCharactersEmbedder(torch.nn.Module):
 Update date: 2019-Nov-5"""
 
 
-class ElmoTokenEmbedder(torch.nn.Module):
-    def __init__(
-        self,
-        options_file,
-        weight_file,
-        dropout=0.5,
-        requires_grad=False,
-        projection_dim=None,
-    ):
-        super(ElmoTokenEmbedder, self).__init__()
+# class ElmoTokenEmbedder(torch.nn.Module):
+#     def __init__(
+#         self,
+#         options_file,
+#         weight_file,
+#         dropout=0.5,
+#         requires_grad=False,
+#         projection_dim=None,
+#     ):
+#         super(ElmoTokenEmbedder, self).__init__()
 
-        self._elmo = Elmo(
-            options_file,
-            weight_file,
-            num_output_representations=1,
-            dropout=dropout,
-            requires_grad=requires_grad,
-        )
-        if projection_dim:
-            self._projection = torch.nn.Linear(
-                self._elmo.get_output_dim(), projection_dim
-            )
-            self.output_dim = projection_dim
-        else:
-            self._projection = None
-            self.output_dim = self._elmo.get_output_dim()
+#         self._elmo = Elmo(
+#             options_file,
+#             weight_file,
+#             num_output_representations=1,
+#             dropout=dropout,
+#             requires_grad=requires_grad,
+#         )
+#         if projection_dim:
+#             self._projection = torch.nn.Linear(
+#                 self._elmo.get_output_dim(), projection_dim
+#             )
+#             self.output_dim = projection_dim
+#         else:
+#             self._projection = None
+#             self.output_dim = self._elmo.get_output_dim()
 
-    def get_output_dim(self):
-        return self.output_dim
+#     def get_output_dim(self):
+#         return self.output_dim
 
-    def forward(self, inputs):
-        # inputs: batch_size, num_tokens, 50
-        elmo_output = self._elmo(inputs)
-        elmo_representations = elmo_output["elmo_representations"][0]
-        if self._projection:
-            projection = self._projection
-            for _ in range(elmo_representations.dim() - 2):
-                projection = TimeDistributed(projection)
-            elmo_representations = projection(elmo_representations)
-        return elmo_representations
+#     def forward(self, inputs):
+#         # inputs: batch_size, num_tokens, 50
+#         elmo_output = self._elmo(inputs)
+#         elmo_representations = elmo_output["elmo_representations"][0]
+#         if self._projection:
+#             projection = self._projection
+#             for _ in range(elmo_representations.dim() - 2):
+#                 projection = TimeDistributed(projection)
+#             elmo_representations = projection(elmo_representations)
+#         return elmo_representations
 
 
 """Update date: 2019-Nov-5"""

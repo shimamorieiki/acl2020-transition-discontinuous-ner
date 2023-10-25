@@ -46,7 +46,7 @@ class DatasetReaderYS:
             _type_: _description_
         """
 
-        count = 0
+        # count = 0
         instances: list[Instance] = []
 
         with open(filepath, mode="r", encoding="utf-8") as f:
@@ -56,6 +56,11 @@ class DatasetReaderYS:
                 labels = jsonl["label"]
                 tokens: list[Token] = [Token(t) for t in wakati]
                 actions: list[str] = jsonl["actions"]
+
+                # ラベル間の不均衡を緩和するため、
+                # OUT のラベルしか含まれていないデータを利用しないようにする
+                if all(action == "OUT" for action in actions):
+                    continue
 
                 # 元の文に復元したもの
                 sentence = "".join(wakati)
@@ -80,9 +85,9 @@ class DatasetReaderYS:
                         actions=actions,
                     )
                 )
-                count += 1
-                if count >= 100:
-                    break
+                # count += 1
+                # if count >= 300:
+                #     break
 
         return instances
 

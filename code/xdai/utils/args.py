@@ -20,7 +20,7 @@ class SimpleArgumentParser(Tap):
     do_train: bool = False
     learning_rate: float = 5e-5
     train_batch_size_per_gpu: int = 8
-    num_train_epochs: int = 10
+    num_train_epochs: int = 20
     max_steps: int = 0  # If > 0, override num_train_epochs.
     warmup_steps: int = 0
     logging_steps: int = 50

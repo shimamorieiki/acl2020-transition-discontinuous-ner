@@ -336,16 +336,41 @@ class _Stack(object):
         self._states.pop()
         self.stack_lstm.pop()
 
+    def complete(self) -> None:
+        """_summary_
+        completeする
+        stackの先頭2つを削除する
+        """
+        assert len(self._states) > 1
+        self._states.pop()
+        self._states.pop()
+
+        # stackの上から2つを捨てる
+        self.stack_lstm.state.pop()
+        self.stack_lstm.state.pop()
+
     def complete_r(self) -> None:
         """_summary_
-        completeするがそれ自身を使う可能性があるのでまた戻す
+        complete-rightする
+        stackの先頭2つを削除し、先頭のものを元に戻す
+        つまり先頭から2番目のもののみを削除することと等しい
         """
-        # 一度popしてもう一度同じものをpushするので実質何もしていないに等しい
-        # 意図的に何もしていないことを明示しておく
-        # TODO これはFalse
-        # 先頭のentityと2番目のentityを取り出すので、先頭はもう一度置きなおすとしても
-        # 2番目のものは取り除かなければならない
-        pass
+        assert len(self._states) > 1
+
+        # 先頭のものは使うので変数に入れる
+        # 上から2番目のものは使わないのでそのまま捨てる
+        right_hidden: torch.Tensor
+        right_cell: torch.Tensor
+        right_hidden, right_cell = self._states.pop()
+        self._states.pop()
+
+        # stackの上から2つを捨てる
+        self.stack_lstm.state.pop()
+        self.stack_lstm.state.pop()
+
+        # stack_item_r を追加する
+        self._states.append((right_hidden, right_cell))
+        self.stack_lstm.push(right_hidden)
 
     def __len__(self) -> int:
         return len(self._states)
@@ -682,7 +707,7 @@ class TransitionModel(torch.nn.Module):
             case "OUT":
                 buffer.pop()
             case "COMPLETE":
-                stack.pop()
+                stack.complete()
             case "COMPLETE-RIGHT":
                 stack.complete_r()
             case "REDUCE":
@@ -820,10 +845,10 @@ class TransitionModel(torch.nn.Module):
 
                     stack, buffer = self._apply_action(stack, buffer, gold_action_name)
 
-                print("--------------train---------------")
-                print(f"gold_actions: {gold_actions}")
-                print(f"pred_actions: {pred_actions}")
-                print("----------------------------------")
+                # print("--------------train---------------")
+                # print(f"gold_actions: {gold_actions}")
+                # print(f"pred_actions: {pred_actions}")
+                # print("----------------------------------")
 
                 assert len(gold_actions) == len(pred_actions)
                 for g, p in zip(gold_actions, pred_actions):
@@ -1031,6 +1056,14 @@ class TransitionModel(torch.nn.Module):
                 # print(f"gold_actions: {gold_actions}")
                 # print(f"pred_actions: {pred_actions}")
                 # print("----------------------------------")
+                for pred_action in pred_actions:
+                    if pred_action != 2 and pred_action != 0:
+                        print("--------------not train---------------")
+                        print(f"gold_actions: {gold_actions}")
+                        print(f"pred_actions: {pred_actions}")
+                        print("----------------------------------")
+                        break
+                #     assert pred_action == 2 or pred_action == 0
                 assert len(gold_actions) == len(pred_actions)
                 for g, p in zip(gold_actions, pred_actions):
                     if g == p:
@@ -1091,6 +1124,8 @@ class TransitionModel(torch.nn.Module):
                     matched_label_name, None
                 )
                 if bef_span is None:
+                    print(f"annotation: {annotation}")
+                    print(f"label_and_ids: {label_and_ids}")
                     raise ValueError("対応するbefのラベルがない")
                 # bef_n_1, bef_n_2 のようにspanが分かれるとまた話がややこしくなるが、
                 # 現状はそうなっていないので([(0,1),(3,4)],[(6,7)])のようなものを考える必要はない
