@@ -247,7 +247,7 @@ class _Stack(object):
         self._states.append((hidden, cell))
         self.stack_lstm.push(hidden)
 
-    def reduce(self, keep: str | None = None) -> None:
+    def reduce(self) -> None:
         """_summary_
         reduce操作を実行する
         reduceするだけ(REDUCE)とreduce後に元の2番目のものをreduceしたものの上に置くもの(REDUCE-LR)がある
@@ -263,24 +263,16 @@ class _Stack(object):
         right_hidden, right_cell = self._states.pop()
         left_hidden, left_cell = self._states.pop()
 
+        # reduce操作を実行する
         hidden: torch.Tensor
         cell: torch.Tensor
         hidden, cell = self.reduce_module(
             left_cell, left_hidden, right_cell, right_hidden
         )
 
-        # reduce後に残す場合がある(right_reduce,left_reduce)
-        if keep == "RIGHT":
-            self._states.append((right_hidden, right_cell))
-            # rightを残すのでleft(stackでは上から2番目,listでは下から2番目)を消す
-            self.stack_lstm.state.pop(-2)
-        elif keep == "LEFT":
-            self._states.append((left_hidden, left_cell))
-            # left を残すので right(stackでは一番上,listでは一番下)を消す
-            self.stack_lstm.state.pop()
-        else:
-            self.stack_lstm.state.pop()
-            self.stack_lstm.state.pop()
+        # 先頭2つを削除する
+        self.stack_lstm.state.pop()
+        self.stack_lstm.state.pop()
 
         self._states.append((hidden, cell))
         self.stack_lstm.push(hidden)
@@ -303,6 +295,7 @@ class _Stack(object):
         right_hidden, right_cell = self._states.pop()
         left_hidden, left_cell = self._states.pop()
 
+        # reduce操作を実行する
         hidden: torch.Tensor
         cell: torch.Tensor
         hidden, cell = self.reduce_module(
@@ -349,6 +342,9 @@ class _Stack(object):
         """
         # 一度popしてもう一度同じものをpushするので実質何もしていないに等しい
         # 意図的に何もしていないことを明示しておく
+        # TODO これはFalse
+        # 先頭のentityと2番目のentityを取り出すので、先頭はもう一度置きなおすとしても
+        # 2番目のものは取り除かなければならない
         pass
 
     def __len__(self) -> int:
@@ -473,9 +469,7 @@ class TransitionModel(torch.nn.Module):
             "total_pair_gold_mentions": 0.0,  # 正解の[2要素からなる1組の並列のタグ]の一致数の合計
         }
 
-    def _get_possible_actions(
-        self, stack: _Stack, buffer: _Buffer, previous_action_name: str = ""
-    ) -> list[int]:
+    def _get_possible_actions(self, stack: _Stack, buffer: _Buffer) -> list[int]:
         """_summary_
         実行できる可能性のあるactionsのリストを取得する
         Args:
@@ -486,6 +480,9 @@ class TransitionModel(torch.nn.Module):
         Returns:
             _type_: _description_
         """
+
+        # print(f"len(stack): {len(stack)}")
+        # print(f"len(buffer): {len(buffer)}")
         valid_actions: list[int] = []
 
         if len(buffer) > 0:
@@ -493,12 +490,11 @@ class TransitionModel(torch.nn.Module):
                 valid_actions.append(self.action2idx["SHIFT"])
             if "OUT" in self.action2idx:
                 valid_actions.append(self.action2idx["OUT"])
-        if len(stack) >= 1:
+        if len(stack) >= 2:
             if "COMPLETE" in self.action2idx:
                 valid_actions.append(self.action2idx["COMPLETE"])
             if "COMPLETE-RIGHT" in self.action2idx:
                 valid_actions.append(self.action2idx["COMPLETE-RIGHT"])
-        if len(stack) >= 2:
             if "REDUCE" in self.action2idx:
                 valid_actions.append(self.action2idx["REDUCE"])
             if "REDUCE-LR" in self.action2idx:
@@ -525,11 +521,11 @@ class TransitionModel(torch.nn.Module):
         # print("self._metric: ", self._metric)
 
         _metrics: dict[str, float] = {}
-        
+
         _metrics["total_pair_pred_mentions"] = self._metric["total_pair_pred_mentions"]
         _metrics["correct_actions"] = self._metric["correct_actions"]
         _metrics["total_actions"] = self._metric["total_actions"]
-        
+
         # actionのaccuracy
         _metrics["accuracy"] = (
             self._metric["correct_actions"] / self._metric["total_actions"]
@@ -735,8 +731,11 @@ class TransitionModel(torch.nn.Module):
         total_loss: int | torch.Tensor = 0
         preds: list[str] = []
         for i in range(batch_size):
+            # 正解のアクションのidのリスト
             gold_actions: list[int] = []
+            # 予測したアクションのidのリスト
             pred_actions: list[int] = []
+
             stack: _Stack = _Stack(
                 self.stack_lstm,
                 self.stack_lstm_initial,
@@ -750,37 +749,39 @@ class TransitionModel(torch.nn.Module):
             buffer: _Buffer = _Buffer(
                 encoded_tokens[i][0 : sequence_lengths[i]], self.token_empty
             )
-            previous_action_name: str = ""
+
+            # gold_actions は学習時、評価時にともにほしい
+            # 特に評価時にちゃんとactionの正解率(accuracy)が向上しているかを確かめたい
+            for j in range(len(actions[i])):
+                # この操作を通してactions中の要素gold_actionsはint型の値になる
+                gold_action: torch.Tensor | int = actions[i][j]
+                # print("gold_action1: ", gold_action)
+                if type(gold_action) != int:
+                    gold_action = gold_action.cpu().data.numpy().item()
+                if type(gold_action) != int:
+                    raise ValueError("関係ないと思うけど一応")
+                if gold_action == 0:
+                    break
+                gold_actions.append(gold_action)
 
             if self.training:
                 # print("今はトレーニング中です")
                 for j in range(len(actions[i])):
-                    # この操作を通してactions中の要素gold_actionsはint型の値になる
-                    gold_action: torch.Tensor | int = actions[i][j]
-                    # print("gold_action1: ", gold_action)
-                    if type(gold_action) != int:
-                        gold_action = gold_action.cpu().data.numpy().item()
-                        # print("gold_action2: ", gold_action)
-                    if gold_action == 0:
-                        # print("gold_action3: ", gold_action)
+                    if j >= len(gold_actions):
                         break
-
                     valid_actions: list[int] | dict[
                         int, int
-                    ] = self._get_possible_actions(stack, buffer, previous_action_name)
-                    # print("valid_actions: ", valid_actions)
-                    assert gold_action in valid_actions
-                    gold_actions.append(gold_action)
-                    gold_action_name: str = self.idx2action[gold_action]
-                    # print("gold_action_name: ", gold_action_name)
-                    previous_action_name = gold_action_name
+                    ] = self._get_possible_actions(stack, buffer)
+                    # print(f"valid_actions: {valid_actions}")
+                    assert gold_actions[j] in valid_actions
+                    gold_action_name: str = self.idx2action[gold_actions[j]]
 
                     # valid_actionsが1つしかなければそれを予想するものとする？
                     # pred_actionに代入するとはつまりどういうことなのかがよくわかっていない
                     if len(valid_actions) == 1:
                         pred_action: int = valid_actions[0]
                         # print("(１つから選択した場合の)pred_action: ", pred_action)
-                        assert pred_action == gold_action
+                        assert pred_action == gold_actions[j]
                     else:
                         # 有効な選択肢が複数ある時はその中からどれを決定するかを選ぶ
                         features: torch.Tensor = self._build_state_representation(
@@ -806,41 +807,45 @@ class TransitionModel(torch.nn.Module):
                         valid_actions = {a: i for i, a in enumerate(valid_actions)}
                         # print("valid_actions: ", valid_actions)
                         assert len(log_probs) == len(valid_actions)
-                        total_loss += log_probs[valid_actions[gold_action]]
-
+                        total_loss += log_probs[valid_actions[gold_actions[j]]]
+                    # print(f"pred_action: {pred_action}")
                     pred_actions.append(pred_action)
                     action_history.push(
                         self.dropout(
                             self.action_embedding(
-                                torch.LongTensor([gold_action]).cuda()
+                                torch.LongTensor([gold_actions[j]]).cuda()
                             )
                         ).squeeze(0)
                     )
 
                     stack, buffer = self._apply_action(stack, buffer, gold_action_name)
 
-                    assert len(gold_actions) == len(pred_actions)
-                    for g, p in zip(gold_actions, pred_actions):
-                        if g == p:
-                            self._metric["correct_actions"] += 1
-                        self._metric["total_actions"] += 1
+                print("--------------train---------------")
+                print(f"gold_actions: {gold_actions}")
+                print(f"pred_actions: {pred_actions}")
+                print("----------------------------------")
+
+                assert len(gold_actions) == len(pred_actions)
+                for g, p in zip(gold_actions, pred_actions):
+                    if g == p:
+                        self._metric["correct_actions"] += 1
+                    self._metric["total_actions"] += 1
             else:
                 # 現状だとtraining以外では(つまりここ以降では)accuracyの計算をしていない
                 # 同様に、trainingではf1値の計算をしていない
                 # TODO これらの値を計算すること自体には価値があると思うのでどこかで計算するように変更する
                 # print("今はトレーニング中ではありません")
                 while True:
-                    valid_actions = self._get_possible_actions(
-                        stack, buffer, previous_action_name
-                    )
+                    valid_actions = self._get_possible_actions(stack, buffer)
                     # print("-------------------------------")
                     # print("valid_actions: ", valid_actions)
                     if len(valid_actions) == 0:
+                        # これは buffer に何も要素がない場合
                         break
                     elif len(valid_actions) == 1:
                         pred_action = valid_actions[0]
                     else:
-                        features = self._build_state_representation(
+                        features: torch.Tensor = self._build_state_representation(
                             buffer, stack, action_history
                         )
                         features = F.relu(self.hidden2feature(self.dropout(features)))
@@ -848,6 +853,7 @@ class TransitionModel(torch.nn.Module):
                         logits = self.feature2action(features)[
                             torch.LongTensor(valid_actions).cuda()
                         ]
+                        # print(f"logits: {logits}")
                         pred_action = valid_actions[
                             torch.max(logits.cpu(), 0)[1].data.numpy().item()
                         ]
@@ -856,7 +862,6 @@ class TransitionModel(torch.nn.Module):
 
                     pred_actions.append(pred_action)
                     pred_action_name = self.idx2action[pred_action]
-                    previous_action_name = pred_action_name
 
                     action_history.push(
                         self.dropout(
@@ -1011,6 +1016,26 @@ class TransitionModel(torch.nn.Module):
                     self._metric["total_gold_disc_mentions"] += len(gold_mentions)
                     self._metric["total_pred_disc_mentions"] += len(pred_mentions)
 
+                # ラベルを推定してその通りに遷移させるため、
+                # 正解のものと推定結果でラベルの数が異なる可能性が高い
+                # 先頭から埋めていって、どちらが足りない分は0で埋める
+                if len(gold_actions) > len(pred_actions):
+                    pred_actions = pred_actions + [0] * (
+                        len(gold_actions) - len(pred_actions)
+                    )
+                else:
+                    gold_actions = gold_actions + [0] * (
+                        len(pred_actions) - len(gold_actions)
+                    )
+                # print("--------------not train---------------")
+                # print(f"gold_actions: {gold_actions}")
+                # print(f"pred_actions: {pred_actions}")
+                # print("----------------------------------")
+                assert len(gold_actions) == len(pred_actions)
+                for g, p in zip(gold_actions, pred_actions):
+                    if g == p:
+                        self._metric["correct_actions"] += 1
+                    self._metric["total_actions"] += 1
                 # 今ここでpredsを返している気持ちもよくわからない。
                 # = ログに出すだけ。
                 # preds.append("|".join(pred_mention_names))
