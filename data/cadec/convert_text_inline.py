@@ -1,15 +1,24 @@
-'''Update date: 2020-Jan-13'''
+"""Update date: 2020-Jan-13"""
 import argparse
 from collections import defaultdict
 
 
 def parse_parameters(parser=None):
-    if parser is None: parser = argparse.ArgumentParser()
+    if parser is None:
+        parser = argparse.ArgumentParser()
 
     ## Required
-    parser.add_argument("--input_ann", default="/data/dai031/Experiments/CADEC/tokens.ann", type=str)
-    parser.add_argument("--input_tokens", default="/data/dai031/Experiments/CADEC/tokens", type=str)
-    parser.add_argument("--output_filepath", default="/data/dai031/Experiments/CADEC/text-inline", type=str)
+    parser.add_argument(
+        "--input_ann", default="/data/dai031/Experiments/CADEC/tokens.ann", type=str
+    )
+    parser.add_argument(
+        "--input_tokens", default="/data/dai031/Experiments/CADEC/tokens", type=str
+    )
+    parser.add_argument(
+        "--output_filepath",
+        default="/data/dai031/Experiments/CADEC/text-inline",
+        type=str,
+    )
     parser.add_argument("--no_doc_info", action="store_true")
 
     args, _ = parser.parse_known_args()
@@ -23,10 +32,13 @@ def output_sentence(f, tokens, mentions, doc=None):
             indices = [int(i) for i in mention[0].split(",")]
             for i in range(0, len(indices), 2):
                 start, end = indices[i], indices[i + 1]
-                tokenized_mention += tokens[start:end + 1]
+                tokenized_mention += tokens[start : end + 1]
 
             if "".join(tokenized_mention) != mention[2].replace(" ", ""):
-                print("%s (original) vs %s (tokenized)" % (mention[2], " ".join(tokenized_mention)))
+                print(
+                    "%s (original) vs %s (tokenized)"
+                    % (mention[2], " ".join(tokenized_mention))
+                )
 
     if doc is not None:
         f.write("Document: %s\n" % doc)
@@ -59,8 +71,12 @@ if __name__ == "__main__":
                 if len(line.strip()) == 0:
                     if len(tokens) > 0:
                         assert pre_doc is not None
-                        output_sentence(out_f, tokens, mentions.get((pre_doc, sent_idx), []),
-                                        None if args.no_doc_info else pre_doc)
+                        output_sentence(
+                            out_f,
+                            tokens,
+                            mentions.get((pre_doc, sent_idx), []),
+                            None if args.no_doc_info else pre_doc,
+                        )
                         sent_idx += 1
                         tokens = []
                     continue
@@ -75,5 +91,9 @@ if __name__ == "__main__":
                 tokens.append(token)
             if len(tokens) > 0:
                 assert pre_doc is not None
-                output_sentence(out_f, tokens, mentions.get((pre_doc, sent_idx), []),
-                                None if args.no_doc_info else pre_doc)
+                output_sentence(
+                    out_f,
+                    tokens,
+                    mentions.get((pre_doc, sent_idx), []),
+                    None if args.no_doc_info else pre_doc,
+                )

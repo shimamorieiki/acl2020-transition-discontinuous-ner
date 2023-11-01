@@ -1,0 +1,28 @@
+{
+	"name": "Jupyter Project",
+	"dockerFile": "Dockerfile",
+	"context": "..",
+	"remoteUser": "jovyan",
+	"workspaceFolder": "/workspaces/acl2020-transition-discontinuous-ner",
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"terminal.integrated.shell.linux": null
+			},
+			"extensions": [
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"ms-toolsai.jupyter"
+			]
+		}
+	},
+	"runArgs": [
+		"--gpus",
+		"all",
+		"--shm-size",
+		"8gb",
+		"-p",
+		"8888:8888"
+	],
+	"postCreateCommand": "start-notebook.sh --NotebookApp.token='' && pip install -r requirements.txt"
+}

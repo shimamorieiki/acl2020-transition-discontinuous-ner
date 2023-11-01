@@ -1,10 +1,16 @@
-'''Update date: 2020-Jan-13'''
-import argparse, os, sys, re
+"""Update date: 2020-Jan-13"""
+import argparse
+import os
+import re
+import sys
+
 
 class Token(object):
     def __init__(self, text=None, start=None, end=None, orig_text=None, text_id=None):
-        self.text = text                                            # might be normalized
-        self.start = int(start) if start is not None else None      # the character offset of this token into the tokenized sentence.
+        self.text = text  # might be normalized
+        self.start = (
+            int(start) if start is not None else None
+        )  # the character offset of this token into the tokenized sentence.
         if end is not None:
             self.end = int(end)
         else:
@@ -15,26 +21,33 @@ class Token(object):
         self.orig_text = orig_text
         self.text_id = text_id
 
-
     def __str__(self):
         return self.text
-
 
     def __repr__(self):
         return self.__str__()
 
+
 class LettersDigitsTokenizer:
     def tokenize(self, text):
-        tokens = [Token(m.group(), start=m.start()) for m in re.finditer(r"[^\W\d_]+|\d+|\S", text)]
+        tokens = [
+            Token(m.group(), start=m.start())
+            for m in re.finditer(r"[^\W\d_]+|\d+|\S", text)
+        ]
         return tokens
 
 
 def parse_parameters(parser=None):
-    if parser is None: parser = argparse.ArgumentParser()
+    if parser is None:
+        parser = argparse.ArgumentParser()
 
     ## Required
-    parser.add_argument("--input_dir", default="/data/dai031/Corpora/CADEC/cadec/text", type=str)
-    parser.add_argument("--output_filepath", default="/data/dai031/Experiments/CADEC/tokens", type=str)
+    parser.add_argument(
+        "--input_dir", default="/data/dai031/Corpora/CADEC/cadec/text", type=str
+    )
+    parser.add_argument(
+        "--output_filepath", default="/data/dai031/Experiments/CADEC/tokens", type=str
+    )
 
     args, _ = parser.parse_known_args()
     return args
@@ -63,7 +76,10 @@ if __name__ == "__main__":
                             num_tokens += 1
                             token_start = token.start + line_start
                             token_end = token.end + line_start
-                            out_f.write("%s %s %d %d\n" % (token.text, doc, token_start, token_end))
+                            out_f.write(
+                                "%s %s %d %d\n"
+                                % (token.text, doc, token_start, token_end)
+                            )
                         out_f.write("\n")
                         line_start += len(line)
 

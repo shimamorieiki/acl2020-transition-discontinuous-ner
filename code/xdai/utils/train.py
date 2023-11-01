@@ -1,14 +1,23 @@
-import logging, os, re, shutil, torch
+import logging
+import os
+import re
+import shutil
+from typing import Any
+import torch
 from tqdm import tqdm
-from typing import List
 from xdai.utils.common import move_to_gpu
 from xdai.utils.nn import enable_gradient_clipping, rescale_gradients
-
+from xdai.utils.instance import Instance
+from xdai.utils.iterator import _Iterator
+from xdai.utils.args import SimpleArgumentParser
+from xdai.ner.transition_discontinuous.models import TransitionModel
 
 logger = logging.getLogger(__name__)
 
 
-'''Update date: 2019-Nov-6'''
+"""Update date: 2019-Nov-6"""
+
+
 class MetricTracker:
     def __init__(self, should_decrease, patience=None):
         self._best_so_far = None
@@ -20,14 +29,12 @@ class MetricTracker:
         self.best_epoch = None
         self._should_decrease = should_decrease
 
-
     def clear(self) -> None:
         self._best_so_far = None
         self._epochs_with_no_improvement = 0
         self._is_best_so_far = True
         self._epoch_number = 0
         self.best_epoch = None
-
 
     def state_dict(self):
         return {
@@ -41,7 +48,6 @@ class MetricTracker:
             "best_epoch": self.best_epoch,
         }
 
-
     def load_state_dict(self, state_dict) -> None:
         self._best_so_far = state_dict["best_so_far"]
         self._patience = state_dict["patience"]
@@ -52,8 +58,8 @@ class MetricTracker:
         self._epoch_number = state_dict["epoch_number"]
         self.best_epoch = state_dict["best_epoch"]
 
-
     def add_metric(self, metric):
+        new_best: bool = False
         if self._best_so_far is None:
             new_best = True
         else:
@@ -74,10 +80,8 @@ class MetricTracker:
             self._epochs_with_no_improvement += 1
         self._epoch_number += 1
 
-
     def is_best_so_far(self) -> bool:
         return self._is_best_so_far
-
 
     def should_stop_early(self) -> bool:
         if self._patience is None:
@@ -86,129 +90,234 @@ class MetricTracker:
             return self._epochs_with_no_improvement >= self._patience
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py (batch_loss)
-Update date: 2019-March-03'''
-def _batch_loss(args, model, batch):
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py (batch_loss)
+Update date: 2019-March-03"""
+
+
+def _batch_loss(
+    args: SimpleArgumentParser,
+    model: TransitionModel,
+    batch: dict[
+        str,
+        torch.Tensor | dict[str, torch.Tensor] | list[str] | tuple[torch.Tensor, ...],
+    ],
+) -> torch.Tensor:
     batch = move_to_gpu(batch, cuda_device=args.cuda_device[0])
-    output_dict = model(**batch)
-    loss = output_dict.get("loss")
+    output_dict: dict[str, Any] = model(**batch)
+    # print("output_dict: ", output_dict)
+    loss: torch.Tensor | None = output_dict.get("loss")
+    if loss is None:
+        raise ValueError("output_dict中にlossが含まれていない")
     return loss
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py (_validation_loss)
-Update date: 2019-April-20'''
-def _get_val_loss(args, model, iterator, data):
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py (_validation_loss)
+Update date: 2019-April-20"""
+
+
+def _get_val_loss(
+    args: SimpleArgumentParser,
+    model: TransitionModel,
+    iterator: _Iterator,
+    data: list[Instance],
+) -> float:
+    # print("これがdataの中身")
+    # for datum in data:
+        # print(datum.fields)
+        # print(datum.fields["actions"].actions)
+        # print(datum.fields["annotations"])
+        # print(datum.fields["tokens"].tokens)
     model.eval()
     generator = iterator(data, shuffle=False)
-    total_loss, batch_counter = 0.0, 0
+    total_loss: float = 0.0
+    batch_counter: int = 0
     for batch in generator:
+        # print(f"batch({type(batch)}): {batch}")
         batch_counter += 1
         _loss = _batch_loss(args, model, batch)
+        # print("_loss: ", _loss)
         if isinstance(_loss, float):
             total_loss += _loss
         else:
             total_loss += _loss.item()
     loss = float(total_loss / batch_counter) if batch_counter > 0 else 0.0
+    # print("loss: ", loss)
+    # exit()
     return loss
 
 
-'''Update date: 2019-April-20'''
-def _is_best_model_so_far(this_epoch_score: float, score_per_epoch: List[float]):
-    if not score_per_epoch:
-        return True
-    else:
+"""Update date: 2019-April-20"""
+
+
+def _is_best_model_so_far(
+    this_epoch_score: float, score_per_epoch: list[float]
+) -> bool:
+    if score_per_epoch:
         return this_epoch_score > max(score_per_epoch)
+    return True
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py
-Update date: 2019-April-20'''
-def _output_metrics_to_console(train_metrics, dev_metrics={}):
-    metric_names = list(train_metrics.keys()) + list(dev_metrics.keys())
-    metric_names = list(set(metric_names))
-    train_metrics = ["%s: %s" % (k, str(train_metrics.get(k, 0))) for k in metric_names]
-    logger.info(" # Train set \n     %s" % ("; ".join(train_metrics)))
-    dev_metrics = ["%s: %s" % (k, str(dev_metrics.get(k, 0))) for k in metric_names]
-    logger.info(" # Dev set \n     %s" % ("; ".join(dev_metrics)))
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py
+Update date: 2019-April-20"""
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#_save_checkpoint
-Update date: 2019-Nov-9'''
-def _save_checkpoint(model_dir, model, epoch, is_best=False):
-    model_path = os.path.join(model_dir, "epoch_%s.th" % epoch)
+def _output_metrics_to_console(
+    train_metrics: dict[str, float], dev_metrics: dict[str, float] = {}
+) -> None:
+    """_summary_
+    trainの結果のメトリクスとdevの結果のメトリクスをログに出力する
+    Args:
+        train_metrics (dict[str, float]): _description_
+        dev_metrics (dict[str, float], optional): _description_. Defaults to {}.
+    """
+
+    # metric名のリスト
+    metric_names: list[str] = list(
+        set(list(train_metrics.keys()) + list(dev_metrics.keys()))
+    )
+    train_metrics_format: list[str] = [
+        "%s: %s" % (k, str(train_metrics.get(k, 0))) for k in metric_names
+    ]
+    logger.info(" # Train set \n     %s" % ("; ".join(train_metrics_format)))
+    dev_metrics_format: list[str] = [
+        "%s: %s" % (k, str(dev_metrics.get(k, 0))) for k in metric_names
+    ]
+    logger.info(" # Dev set \n     %s" % ("; ".join(dev_metrics_format)))
+
+
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#_save_checkpoint
+Update date: 2019-Nov-9"""
+
+
+def _save_checkpoint(
+    model_dir: str, model: TransitionModel, epoch: int, is_best: bool = False
+):
+    model_path: str = os.path.join(model_dir, "epoch_%s.th" % epoch)
     torch.save(model.state_dict(), model_path)
     if is_best:
-        logger.info(" # Best dev performance so far. Copying weights to %s/best.th" % model_dir)
+        logger.info(
+            " # Best dev performance so far. Copying weights to %s/best.th" % model_dir
+        )
         shutil.copyfile(model_path, os.path.join(model_dir, "best.th"))
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py
-Update date: 2019-April-20'''
-def _should_early_stop(score_per_epoch: List[float], patience=0):
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py
+Update date: 2019-April-20"""
+
+
+def _should_early_stop(score_per_epoch: list[float], patience: int = 0) -> bool:
     if patience > 0 and patience < len(score_per_epoch):
         return max(score_per_epoch[-patience:]) <= max(score_per_epoch[:-patience])
     return False
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#_train_epoch
-Update date: 2019-Nov-9'''
-def _train_epoch(args, model, optimizer, iterator, data, shuffle=True):
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#_train_epoch
+Update date: 2019-Nov-9"""
+
+
+def _train_epoch(
+    args: SimpleArgumentParser,
+    model: TransitionModel,
+    optimizer: torch.optim.Optimizer,
+    iterator: _Iterator,
+    data: list[Instance],
+    shuffle=True,
+) -> dict[str, float]:
     model.train()
-    total_loss = 0.0
+    total_loss: float = 0.0
+    # iteratorの型が分からない
     generator = iterator(data, shuffle=shuffle)
-    num_batches = iterator.get_num_batches(data)
-    batch_counter = 0
+    num_batches: int = iterator.get_num_batches(data)
+    batch_counter: int = 0
 
     for batch in generator:
+        # print("batch: ", batch_counter)
         batch_counter += 1
         optimizer.zero_grad()
-        loss = _batch_loss(args, model, batch)
+        loss: torch.Tensor = _batch_loss(args, model, batch)
+        # print("loss: ", loss)
         loss.backward()
         total_loss += loss.item()
         rescale_gradients(model, args.max_grad_norm)
         optimizer.step()
 
-        metrics = model.get_metrics(reset=False)
-        metrics["loss"] = float(total_loss / batch_counter) if batch_counter > 0 else 0.0
+        metrics: dict[str, float] = model.get_metrics(reset=False)
+        metrics["loss"] = (
+            float(total_loss / batch_counter) if batch_counter > 0 else 0.0
+        )
 
         if batch_counter % args.logging_steps == 0 or batch_counter == num_batches:
-            logger.info("%d out of %d batches, loss: %.3f" % (batch_counter, num_batches, metrics["loss"]))
+            logger.info(
+                "%d out of %d batches, loss: %.3f"
+                % (batch_counter, num_batches, metrics["loss"])
+            )
 
     metrics = model.get_metrics(reset=True)
     metrics["loss"] = float(total_loss / batch_counter) if batch_counter > 0 else 0.0
     return metrics
 
 
-'''Update date: 2019-Nov-9'''
-def _check_max_save_checkpoints(output_dir, max_save_checkpoints, pattern=("epoch_", ".th")):
-    if max_save_checkpoints < 0: return None
-    checkpoints = [f for f in os.listdir(output_dir) if f.startswith(pattern[0]) and f.endswith(pattern[1])]
+"""Update date: 2019-Nov-9"""
+
+
+def _check_max_save_checkpoints(
+    output_dir: str,
+    max_save_checkpoints: int,
+    pattern: tuple[str, str] = ("epoch_", ".th"),
+) -> None:
+    if max_save_checkpoints < 0:
+        return None
+    checkpoints = [
+        f
+        for f in os.listdir(output_dir)
+        if f.startswith(pattern[0]) and f.endswith(pattern[1])
+    ]
     if len(checkpoints) > max_save_checkpoints:
-        numbers = sorted([int(re.findall("\d+", filename)[0]) for filename in checkpoints], reverse=True)
+        numbers = sorted(
+            [int(re.findall(r"\d+", filename)[0]) for filename in checkpoints],
+            reverse=True,
+        )
         for n in numbers[max_save_checkpoints:]:
             os.remove(os.path.join(output_dir, "%s%d%s" % (pattern[0], n, pattern[1])))
 
 
-'''Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#train
-Update date: 2019-Nov-9'''
-def train_op(args, model, optimizer, train_data, train_iterator, dev_data, dev_iterator):
-    enable_gradient_clipping(model, args.grad_clipping)
-    model_dir = args.output_dir
-    max_epoches = args.num_train_epochs
-    patience = args.patience
-    validation_metric = args.eval_metric
+"""Reference url: https://github.com/allenai/allennlp/blob/master/allennlp/training/trainer.py#train
+Update date: 2019-Nov-9"""
 
-    validation_metric_per_epoch = []
-    metrics = {}
+
+def train_op(
+    args: SimpleArgumentParser,
+    model: TransitionModel,
+    optimizer: torch.optim.Optimizer,
+    train_data: list[Instance],
+    train_iterator: _Iterator,
+    dev_data: list[Instance],
+    dev_iterator: _Iterator,
+) -> dict[str, int | float]:
+    enable_gradient_clipping(model, args.grad_clipping)
+    model_dir: str = args.output_dir
+    max_epoches: int = args.num_train_epochs
+    patience: int = args.patience
+    # TODO 本当はargsの引数で変更すべきだとは思うが、取りあえずは決め打ち
+    validation_metric = "f1-overall"  # args.eval_metric
+
+    validation_metric_per_epoch: list[float] = []
+    metrics: dict[str, int | float] = {}
 
     for epoch in range(0, max_epoches):
         logger.info("Epoch %d/%d" % (epoch + 1, max_epoches))
         train_metrics = _train_epoch(args, model, optimizer, train_iterator, train_data)
+        # print(f"train_opの中のtrain_metrics: {train_metrics}")
         with torch.no_grad():
-            val_loss = _get_val_loss(args, model, dev_iterator, dev_data)
-            val_metrics = model.get_metrics(reset=True)
+            val_loss: float = _get_val_loss(args, model, dev_iterator, dev_data)
+            # print("val_loss: ", val_loss)
+            val_metrics: dict[str, float] = model.get_metrics(reset=True)
             val_metrics["loss"] = val_loss
-            this_epoch_val_metric = val_metrics[validation_metric]
-            is_best = _is_best_model_so_far(this_epoch_val_metric, validation_metric_per_epoch)
+            # print("val_metrics: ", val_metrics)
+            this_epoch_val_metric: float = val_metrics[validation_metric]
+            is_best: bool = _is_best_model_so_far(
+                this_epoch_val_metric, validation_metric_per_epoch
+            )
             validation_metric_per_epoch.append(this_epoch_val_metric)
 
         _output_metrics_to_console(train_metrics, val_metrics)
@@ -233,18 +342,29 @@ def train_op(args, model, optimizer, train_data, train_iterator, dev_data, dev_i
     return metrics
 
 
-'''Update date: 2019-Nov-7'''
-def eval_op(args, model, data, data_iterator):
-    sentences, predictions = [], []
+"""Update date: 2019-Nov-7"""
+
+
+def eval_op(
+    args: SimpleArgumentParser,
+    model: TransitionModel,
+    data: list[Instance],
+    data_iterator: _Iterator,
+) -> tuple[dict[str, float], list[tuple]]:
+    sentences = []
+    predictions = []
     with torch.no_grad():
         model.eval()
         generator = data_iterator(data, shuffle=False)
-        total_loss = 0.0
+        total_loss: float = 0.0
         for batch in tqdm(generator, desc="Evaluating"):
             sentences += batch["sentence"]
             batch = move_to_gpu(batch, args.cuda_device[0])
             output_dict = model(**batch)
-            loss = output_dict.get("loss", None)
+            # print("output_dict")
+            # print(output_dict)
+            # print(type(output_dict))
+            loss: torch.Tensor | None = output_dict.get("loss", None)
             predictions += output_dict.get("preds")
             if loss:
                 total_loss += loss.item()

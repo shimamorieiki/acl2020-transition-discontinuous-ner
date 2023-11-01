@@ -1,11 +1,15 @@
-import argparse, logging, os, sys
+import argparse
+import logging
+import os
+import sys
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
 
 def parse_parameters(parser=None):
-    if parser is None: parser = argparse.ArgumentParser()
+    if parser is None:
+        parser = argparse.ArgumentParser()
 
     parser.add_argument("--output_dir", default=None, type=str)
     parser.add_argument("--log_filepath", default="output.log", type=str)
@@ -60,9 +64,16 @@ def read_data(ann_filepath, tokens_filepath):
 
 if __name__ == "__main__":
     args = parse_parameters()
-    handlers = [logging.FileHandler(filename=args.log_filepath), logging.StreamHandler(sys.stdout)]
-    logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s -  %(message)s", datefmt="%m/%d/%Y %H:%M:%S",
-                        level=logging.INFO, handlers=handlers)
+    handlers = [
+        logging.FileHandler(filename=args.log_filepath),
+        logging.StreamHandler(sys.stdout),
+    ]
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s -  %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
+        handlers=handlers,
+    )
 
     train_ann, train_sentences = read_data("train.token.ann", "train.tokens")
     test_ann, test_sentences = read_data("test.token.ann", "test.tokens")

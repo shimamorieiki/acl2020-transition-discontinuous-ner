@@ -1,16 +1,19 @@
-'''Usage:
+"""Usage:
 python convert_text_inline_to_conll.py --input_filepath /data/dai031/Experiments/CADEC/adr/flat/train.txt --output_filepath /data/dai031/Experiments/CADEC/adr/flat/train.conll
 python convert_text_inline_to_conll.py --input_filepath /data/dai031/Experiments/CADEC/adr/flat/dev.txt --output_filepath /data/dai031/Experiments/CADEC/adr/flat/dev.conll
 python convert_text_inline_to_conll.py --input_filepath /data/dai031/Experiments/CADEC/adr/flat/test.txt --output_filepath /data/dai031/Experiments/CADEC/adr/flat/test.conll
-'''
-import argparse, os, sys
+"""
+import argparse
+import os
+import sys
 
 sys.path.insert(0, os.path.abspath("../.."))
 from xdai.ner.mention import mentions_to_bio_tags
 
 
 def parse_parameters(parser=None):
-    if parser is None: parser = argparse.ArgumentParser()
+    if parser is None:
+        parser = argparse.ArgumentParser()
 
     ## Required
     parser.add_argument("--input_filepath", type=str)
